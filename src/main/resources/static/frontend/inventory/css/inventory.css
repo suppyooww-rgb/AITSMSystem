@@ -76,6 +76,81 @@
   font-size: .85rem;
 }
 
+.drive-breakdown-list {
+  display: grid;
+  gap: 10px;
+}
+
+.drive-breakdown-item {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 92%, var(--primary) 8%);
+}
+
+.drive-breakdown-heading,
+.drive-usage-heading,
+.drive-breakdown-metrics {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.drive-breakdown-heading > span,
+.drive-usage-heading,
+.drive-breakdown-metrics small,
+.drive-breakdown-empty {
+  color: var(--muted);
+  font-size: .82rem;
+}
+
+.drive-usage {
+  margin: 10px 0;
+}
+
+.drive-usage-heading {
+  margin-bottom: 5px;
+}
+
+.drive-usage progress {
+  display: block;
+  width: 100%;
+  height: 8px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 999px;
+  background: var(--border);
+}
+
+.drive-usage progress::-webkit-progress-bar {
+  background: var(--border);
+  border-radius: 999px;
+}
+
+.drive-usage progress::-webkit-progress-value {
+  background: var(--primary);
+  border-radius: 999px;
+}
+
+.drive-usage progress::-moz-progress-bar {
+  background: var(--primary);
+  border-radius: 999px;
+}
+
+.drive-breakdown-metrics > span {
+  display: grid;
+  gap: 2px;
+}
+
+.drive-breakdown-metrics > span:last-child {
+  text-align: right;
+}
+
+.drive-breakdown-empty {
+  margin: 0;
+}
+
 .inventory-notes-card {
   margin-top: 12px;
 }

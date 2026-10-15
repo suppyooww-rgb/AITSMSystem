@@ -20,6 +20,61 @@ function inventoryField(label, value, allowHtml = false) {
   return `<div class='inventory-field'><div class='inventory-field-label'>${aitsmEscapeHtml(label)}</div><div>${rendered}</div></div>`;
 }
 
+function storageValueInBytes(value) {
+  const match = String(value || '').trim().match(/^([\d.,]+)\s*(B|KB|MB|GB|TB)?$/i);
+  if (!match) return null;
+
+  const amount = Number(match[1].replace(/,/g, ''));
+  if (!Number.isFinite(amount)) return null;
+
+  const unit = (match[2] || 'B').toUpperCase();
+  const multipliers = { B: 1, KB: 1024, MB: 1024 ** 2, GB: 1024 ** 3, TB: 1024 ** 4 };
+  return amount * multipliers[unit];
+}
+
+function formatDriveBreakdown(rawValue) {
+  if (!rawValue) return `<p class='drive-breakdown-empty'>No drive details reported.</p>`;
+
+  let parsed = rawValue;
+  if (typeof rawValue === 'string') {
+    try {
+      parsed = JSON.parse(rawValue);
+    } catch (_) {
+      return `<p class='drive-breakdown-empty'>Drive details could not be read.</p>`;
+    }
+  }
+
+  const drives = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.drives) ? parsed.drives : [parsed]);
+  const validDrives = drives.filter((drive) => drive && typeof drive === 'object');
+  if (!validDrives.length) return `<p class='drive-breakdown-empty'>No drive details reported.</p>`;
+
+  return `<div class='drive-breakdown-list'>${validDrives.map((drive, index) => {
+    const name = drive.drive || drive.name || drive.letter || drive.mount || `Drive ${index + 1}`;
+    const total = drive.total || 'Unavailable';
+    const used = drive.used || 'Unavailable';
+    const free = drive.free || 'Unavailable';
+    const totalBytes = storageValueInBytes(drive.total);
+    const usedBytes = storageValueInBytes(drive.used);
+    const freeBytes = storageValueInBytes(drive.free);
+    const calculatedUsed = usedBytes ?? (totalBytes !== null && freeBytes !== null ? totalBytes - freeBytes : null);
+    const percentUsed = totalBytes > 0 && calculatedUsed !== null
+      ? Math.max(0, Math.min(100, Math.round((calculatedUsed / totalBytes) * 100)))
+      : null;
+    const usage = percentUsed === null
+      ? ''
+      : `<div class='drive-usage'><div class='drive-usage-heading'><span>Space used</span><strong>${percentUsed}%</strong></div><progress value='${percentUsed}' max='100' aria-label='${aitsmEscapeHtml(name)} storage used: ${percentUsed}%'>${percentUsed}%</progress></div>`;
+
+    return `<article class='drive-breakdown-item'>
+      <div class='drive-breakdown-heading'><strong>${aitsmEscapeHtml(name)}</strong><span>${aitsmEscapeHtml(total)} total</span></div>
+      ${usage}
+      <div class='drive-breakdown-metrics'>
+        <span><small>Used</small><strong>${aitsmEscapeHtml(used)}</strong></span>
+        <span><small>Free</small><strong>${aitsmEscapeHtml(free)}</strong></span>
+      </div>
+    </article>`;
+  }).join('')}</div>`;
+}
+
 function parseListResponse(payload) {
   if (Array.isArray(payload)) return { data: payload, meta: { totalCount: payload.length, pageSize: payload.length, currentPage: 1 } };
   if (Array.isArray(payload?.data)) return payload;
@@ -195,7 +250,7 @@ function renderInventoryDetailGroups(asset) {
     inventoryField('Storage Total', asset.storageTotal),
     inventoryField('Storage Used', asset.storageUsed),
     inventoryField('Storage Free', asset.storageFree),
-    inventoryField('Drive Breakdown', asset.storageBreakdownJson)
+    inventoryField('Drive Breakdown', formatDriveBreakdown(asset.storageBreakdownJson), true)
   ]);
 
   setFields('inventoryGraphicsFields', [

@@ -97,6 +97,8 @@ class FrontendSafetyContractTest {
         assertTrue(inventoryService.contains("filters.copy(connectionSource = \"agent\")"))
         assertTrue(inventoryScript.contains("class='inventory-device-row'"))
         assertTrue(inventoryScript.contains("openInventoryDetail"))
+        assertTrue(inventoryScript.contains("formatDriveBreakdown(asset.storageBreakdownJson)"))
+        assertTrue(inventoryScript.contains("aitsmEscapeHtml(name)"))
         assertTrue(inventoryHtml.contains("<th>Device</th><th>IP Address</th><th>Status</th><th>Last Seen</th><th>Department</th>"))
         assertFalse(inventoryHtml.contains("<th>Processor</th>"))
     }
