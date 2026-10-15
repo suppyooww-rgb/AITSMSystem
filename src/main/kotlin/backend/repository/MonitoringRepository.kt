@@ -137,7 +137,8 @@ class MonitoringRepository(private val clock: Clock = Clock.systemUTC()) {
         val id = CollectorToken.collectorId(rawToken) ?: return@transaction null
         val row = MonitoringCollectorsTable.selectAll().where { MonitoringCollectorsTable.id eq id }.singleOrNull()
             ?: return@transaction null
-        if (row[MonitoringCollectorsTable.revokedAt] != null || !CollectorToken.matches(rawToken, row[MonitoringCollectorsTable.tokenHash])) null
+        if (row[MonitoringCollectorsTable.revokedAt] != null || row[MonitoringCollectorsTable.archivedAt] != null ||
+            !CollectorToken.matches(rawToken, row[MonitoringCollectorsTable.tokenHash])) null
         else CollectorIdentity(id, row[MonitoringCollectorsTable.scope], row[MonitoringCollectorsTable.ownerUserId])
     }
 
@@ -147,14 +148,29 @@ class MonitoringRepository(private val clock: Clock = Clock.systemUTC()) {
         } > 0
     }
 
-    fun listCollectors(ownerId: Int? = null): List<CollectorView> = transaction {
+    fun archive(id: UUID): Boolean = transaction {
+        MonitoringCollectorsTable.update({
+            (MonitoringCollectorsTable.id eq id) and MonitoringCollectorsTable.revokedAt.isNotNull() and
+                MonitoringCollectorsTable.archivedAt.isNull()
+        }) { it[archivedAt] = now() } > 0
+    }
+
+    fun listCollectors(ownerId: Int? = null, includeArchived: Boolean = false): List<CollectorView> = transaction {
         val instantNow = clock.instant()
         val query = MonitoringCollectorsTable.selectAll().let { base ->
-            if (ownerId == null) base else base.where { MonitoringCollectorsTable.ownerUserId eq ownerId }
+            when {
+                ownerId != null && !includeArchived -> base.where {
+                    (MonitoringCollectorsTable.ownerUserId eq ownerId) and MonitoringCollectorsTable.archivedAt.isNull()
+                }
+                ownerId != null -> base.where { MonitoringCollectorsTable.ownerUserId eq ownerId }
+                !includeArchived -> base.where { MonitoringCollectorsTable.archivedAt.isNull() }
+                else -> base
+            }
         }
         query.orderBy(MonitoringCollectorsTable.enrolledAt, SortOrder.DESC).map { row ->
             val lastSeen = row[MonitoringCollectorsTable.lastSeenAt]
             val state = when {
+                row[MonitoringCollectorsTable.archivedAt] != null -> "ARCHIVED"
                 row[MonitoringCollectorsTable.revokedAt] != null -> "REVOKED"
                 lastSeen == null -> "NEVER_CONNECTED"
                 lastSeen.toInstant(ZoneOffset.UTC).isAfter(instantNow.minusSeconds(120)) -> "ONLINE"
@@ -162,6 +178,7 @@ class MonitoringRepository(private val clock: Clock = Clock.systemUTC()) {
                 else -> "OFFLINE"
             }
             val statusReason = when (state) {
+                "ARCHIVED" -> "Archived from the active collector list. Historical records are retained."
                 "REVOKED" -> "Credential revoked. This collector can no longer submit telemetry."
                 "NEVER_CONNECTED" -> "Enrollment completed, but no telemetry report has been received."
                 "ONLINE" -> "Telemetry received within the last two minutes."
@@ -170,6 +187,7 @@ class MonitoringRepository(private val clock: Clock = Clock.systemUTC()) {
             }
             CollectorView(row[MonitoringCollectorsTable.id].toString(), row[MonitoringCollectorsTable.siteId], row[MonitoringCollectorsTable.name], state,
                 iso(row[MonitoringCollectorsTable.enrolledAt])!!, iso(lastSeen), iso(row[MonitoringCollectorsTable.revokedAt]),
+                iso(row[MonitoringCollectorsTable.archivedAt]),
                 row[MonitoringCollectorsTable.scope], row[MonitoringCollectorsTable.ownerUserId], statusReason,
                 row[MonitoringCollectorsTable.agentVersion], iso(row[MonitoringCollectorsTable.serviceStartedAt]),
                 row[MonitoringCollectorsTable.lastError], row[MonitoringCollectorsTable.consecutiveFailures])

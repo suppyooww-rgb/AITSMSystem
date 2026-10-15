@@ -225,6 +225,7 @@ data class HostTelemetryDto(
 @Serializable data class CollectorView(
     val collectorId: String, val siteId: String, val name: String, val state: String,
     val enrolledAt: String, val lastSeenAt: String? = null, val revokedAt: String? = null,
+    val archivedAt: String? = null,
     val scope: String = "LAN", val ownerUserId: Int? = null, val statusReason: String? = null,
     val agentVersion: String? = null, val serviceStartedAt: String? = null,
     val lastReportedError: String? = null, val consecutiveFailures: Int = 0

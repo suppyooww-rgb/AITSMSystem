@@ -87,6 +87,7 @@ class MonitoringService(
     )
     fun canDownloadPackage(code: String, userId: Int) = repository.enrollmentCodeBelongsTo(code.trim(), userId)
     fun revoke(rawId: String): Boolean = repository.revoke(UUID.fromString(rawId))
+    fun archive(rawId: String): Boolean = repository.archive(UUID.fromString(rawId))
     fun revokeOwned(rawId: String, userId: Int): Boolean = repository.revokeOwned(UUID.fromString(rawId), userId)
     fun devices() = visibleCollectorDevices(deduplicatedLiveDevices(repository.devices()))
     fun lanDevices() = devices()

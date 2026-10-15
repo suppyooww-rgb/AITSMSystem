@@ -74,4 +74,16 @@ class CollectorInstallerContractTest {
         assertTrue(adapterMigration.contains("COUNT(DISTINCT lower(device_uuid))"))
         assertTrue(adapterMigration.contains("monitoring_device_addresses"))
     }
+
+    @Test fun `revoked collectors can be archived without deleting history`() {
+        val migration = Files.readString(Path.of("db/migrations/V013__archive_revoked_collectors.sql"))
+        val repository = Files.readString(Path.of("src/main/kotlin/backend/repository/MonitoringRepository.kt"))
+        val routes = Files.readString(Path.of("src/main/kotlin/backend/routes/MonitoringRoutes.kt"))
+
+        assertTrue(migration.contains("archived_at"))
+        assertTrue(repository.contains("MonitoringCollectorsTable.revokedAt.isNotNull()"))
+        assertTrue(repository.contains("MonitoringCollectorsTable.archivedAt.isNull()"))
+        assertTrue(routes.contains("/collectors/{id}/archive"))
+        assertFalse(repository.contains("MonitoringCollectorsTable.deleteWhere"))
+    }
 }

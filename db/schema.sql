@@ -143,7 +143,8 @@ CREATE TABLE IF NOT EXISTS monitoring_collectors (
   token_hash VARCHAR(64) NOT NULL UNIQUE,
   enrolled_at TIMESTAMP NOT NULL,
   last_seen_at TIMESTAMP,
-  revoked_at TIMESTAMP
+  revoked_at TIMESTAMP,
+  archived_at TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS monitoring_devices (

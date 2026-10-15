@@ -182,6 +182,14 @@ psql -h 127.0.0.1 -p 5433 -U $DB_MIGRATOR_USER -d $DB_NAME -v ON_ERROR_STOP=1 -f
 psql -h 127.0.0.1 -p 5433 -U $DB_MIGRATOR_USER -d $DB_NAME -v ON_ERROR_STOP=1 -f "db/migrations/V003__reconcile_verified_account_state.sql"
 psql -h 127.0.0.1 -p 5433 -U $DB_MIGRATOR_USER -d $DB_NAME -v ON_ERROR_STOP=1 -f "db/migrations/V004__transaction_notification_idempotency.sql"
 psql -h 127.0.0.1 -p 5433 -U $DB_MIGRATOR_USER -d $DB_NAME -v ON_ERROR_STOP=1 -f "db/migrations/V005__collector_monitoring.sql"
+psql -h 127.0.0.1 -p 5433 -U $DB_MIGRATOR_USER -d $DB_NAME -v ON_ERROR_STOP=1 -f "db/migrations/V006__backfill_colleague_notification_actors.sql"
+psql -h 127.0.0.1 -p 5433 -U $DB_MIGRATOR_USER -d $DB_NAME -v ON_ERROR_STOP=1 -f "db/migrations/V007__reviewed_ticket_resolutions.sql"
+psql -h 127.0.0.1 -p 5433 -U $DB_MIGRATOR_USER -d $DB_NAME -v ON_ERROR_STOP=1 -f "db/migrations/V008__collector_self_service_enrollment.sql"
+psql -h 127.0.0.1 -p 5433 -U $DB_MIGRATOR_USER -d $DB_NAME -v ON_ERROR_STOP=1 -f "db/migrations/V009__collector_diagnostics_and_device_identity.sql"
+psql -h 127.0.0.1 -p 5433 -U $DB_MIGRATOR_USER -d $DB_NAME -v ON_ERROR_STOP=1 -f "db/migrations/V010__sla_lifecycle_and_prediction.sql"
+psql -h 127.0.0.1 -p 5433 -U $DB_MIGRATOR_USER -d $DB_NAME -v ON_ERROR_STOP=1 -f "db/migrations/V011__canonical_devices_and_address_history.sql"
+psql -h 127.0.0.1 -p 5433 -U $DB_MIGRATOR_USER -d $DB_NAME -v ON_ERROR_STOP=1 -f "db/migrations/V012__merge_stale_adapter_identity_into_uuid_device.sql"
+psql -h 127.0.0.1 -p 5433 -U $DB_MIGRATOR_USER -d $DB_NAME -v ON_ERROR_STOP=1 -f "db/migrations/V013__archive_revoked_collectors.sql"
 Remove-Item Env:PGPASSWORD
 ```
 
@@ -386,7 +394,7 @@ Test with separate administrator and end-user accounts:
 11. Colleague requests and messaging in two browser sessions.
 12. From each role, create and download the Windows collector package. Confirm end users receive `SELF` scope, administrators can receive `LAN` scope, the enrollment redeems only once, the Windows service starts automatically, an HTTPS report is accepted, health changes to Online, and revocation causes later reports to receive HTTP 401.
 
-Apply all ordered migrations through `V008__collector_self_service_enrollment.sql` before deploying this release. V008 must be applied before the application revision because production disables runtime schema mutation. Collector installation, scope, credential storage, firewall, verification, and uninstall guidance is in `collector/windows/README.md`.
+Apply all ordered migrations through `V013__archive_revoked_collectors.sql` before deploying this release. Production disables runtime schema mutation, so database migrations must finish before the application revision is changed. Collector installation, scope, credential storage, firewall, verification, and uninstall guidance is in `collector/windows/README.md`.
 
 Unauthenticated security checks:
 

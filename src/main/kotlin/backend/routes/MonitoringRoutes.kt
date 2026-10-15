@@ -123,6 +123,14 @@ fun Route.monitoringRoutes(
             if (!runCatching { service.revoke(id) }.getOrDefault(false)) return@delete call.respond(HttpStatusCode.NotFound, ApiErrorResponse(404, "Collector not found"))
             call.respond(mapOf("revoked" to true))
         }
+        delete("/collectors/{id}/archive") {
+            if (!call.requireRole(UserRole.ADMIN)) return@delete
+            val id = call.parameters["id"] ?: return@delete call.respond(HttpStatusCode.BadRequest, ApiErrorResponse(400, "Collector id is required"))
+            if (!runCatching { service.archive(id) }.getOrDefault(false)) {
+                return@delete call.respond(HttpStatusCode.Conflict, ApiErrorResponse(409, "Revoke the collector before removing it from the active list"))
+            }
+            call.respond(mapOf("archived" to true))
+        }
         delete("/my-collectors/{id}") {
             if (!call.requireAuthenticated()) return@delete
             val actorId = call.userId() ?: return@delete call.respond(HttpStatusCode.Unauthorized)

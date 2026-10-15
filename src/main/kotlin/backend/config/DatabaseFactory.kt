@@ -175,6 +175,7 @@ object MonitoringCollectorsTable : Table("monitoring_collectors") {
     val enrolledAt = datetime("enrolled_at")
     val lastSeenAt = datetime("last_seen_at").nullable().index()
     val revokedAt = datetime("revoked_at").nullable().index()
+    val archivedAt = datetime("archived_at").nullable().index()
     val agentVersion = varchar("agent_version", 40).nullable()
     val serviceStartedAt = datetime("service_started_at").nullable()
     val lastError = varchar("last_error", 500).nullable()

@@ -118,6 +118,8 @@ class FrontendSafetyContractTest {
         assertTrue(settingsHtml.contains("class='collector-table'"))
         assertTrue(settingsScript.contains("collectorActionMenu(item, index)"))
         assertTrue(settingsScript.contains("aria-haspopup='menu'"))
-        assertTrue(settingsStyles.contains("@media (max-width: 1280px)"))
+        assertTrue(settingsScript.contains("archiveCollector"))
+        assertTrue(settingsStyles.contains(".collector-table"))
+        assertFalse(settingsStyles.contains("grid-column: 1 / -1"))
     }
 }

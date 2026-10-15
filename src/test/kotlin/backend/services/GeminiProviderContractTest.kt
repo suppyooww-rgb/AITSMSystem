@@ -13,6 +13,9 @@ class GeminiProviderContractTest {
         assertTrue(source.contains(":generateContent"))
         assertTrue(source.contains("generationConfig"))
         assertTrue(source.contains("candidates"))
+        assertTrue(source.contains("gemini-flash-latest"))
+        assertTrue(source.contains("response.statusCode() in setOf(408, 429) || response.statusCode() >= 500"))
+        assertTrue(source.contains("ThreadLocalRandom"))
         assertFalse(source.contains("/v1beta/interactions"))
     }
 }

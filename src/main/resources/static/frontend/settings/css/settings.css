@@ -49,12 +49,6 @@
   color: var(--danger);
 }
 
-@media (max-width: 1280px) {
-  .collector-settings-card {
-    grid-column: 1 / -1;
-  }
-}
-
 @media (max-width: 720px) {
   .collector-table {
     min-width: 560px;

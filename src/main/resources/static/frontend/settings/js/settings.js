@@ -142,6 +142,8 @@ function collectorActionMenu(item, index) {
   if (item.state !== 'REVOKED') {
     actions.push(`<button type='button' onclick='repairCollector(${id})'>Download repair installer</button>`);
     actions.push(`<button class='collector-menu-danger' type='button' onclick='revokeCollector(${id})'>Revoke collector</button>`);
+  } else {
+    actions.push(`<button class='collector-menu-danger' type='button' onclick='archiveCollector(${id})'>Remove from list</button>`);
   }
   return `<div class='row-action-wrap'>
     <button class='btn btn-ghost icon-btn collector-menu-trigger' type='button' onclick='toggleCollectorActionMenu(event, "${menuId}")' aria-haspopup='menu' aria-expanded='false' aria-controls='${menuId}' aria-label='Actions for ${aitsmEscapeHtml(item.name || 'collector')}' title='Collector actions'>•••</button>
@@ -206,6 +208,19 @@ async function revokeCollector(id) {
   if (!confirm('Revoke this collector? It will stop accepting reports immediately.')) return;
   await fetchJsonOrThrow(`/api/monitoring/collectors/${encodeURIComponent(id)}`, { method: 'DELETE' });
   await loadCollectors();
+}
+
+async function archiveCollector(id) {
+  closeCollectorActionMenus();
+  const item = collectorRecords.get(id);
+  if (!item || item.state !== 'REVOKED') return;
+  if (!confirm(`Remove ${item.name} from the active collector list? Historical records will be retained. This does not uninstall the Windows service.`)) return;
+  try {
+    await fetchJsonOrThrow(`/api/monitoring/collectors/${encodeURIComponent(id)}/archive`, { method: 'DELETE' });
+    await loadCollectors();
+  } catch (error) {
+    showAppAlert(error.message || 'Unable to remove the collector from the active list.');
+  }
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
