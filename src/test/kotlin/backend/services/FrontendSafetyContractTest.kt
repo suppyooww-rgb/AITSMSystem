@@ -108,4 +108,16 @@ class FrontendSafetyContractTest {
         assertTrue(dashboard.contains("label: 'Telemetry Coverage', value: telemetryCoverage, target: 'Above 70%', higherIsBetter: true"))
         assertTrue(dashboard.contains("metric.value >= 70 ? { tone: 'resolved', label: 'Stable' }"))
     }
+
+    @Test fun `collector actions use a zoom friendly overflow menu`() {
+        val settingsHtml = Files.readString(Path.of("src/main/resources/static/frontend/settings/html/settings.html"))
+        val settingsScript = Files.readString(Path.of("src/main/resources/static/frontend/settings/js/settings.js"))
+        val settingsStyles = Files.readString(Path.of("src/main/resources/static/frontend/settings/css/settings.css"))
+
+        assertTrue(settingsHtml.contains("class='card collector-settings-card'"))
+        assertTrue(settingsHtml.contains("class='collector-table'"))
+        assertTrue(settingsScript.contains("collectorActionMenu(item, index)"))
+        assertTrue(settingsScript.contains("aria-haspopup='menu'"))
+        assertTrue(settingsStyles.contains("@media (max-width: 1280px)"))
+    }
 }

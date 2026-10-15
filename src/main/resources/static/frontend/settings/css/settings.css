@@ -1,0 +1,68 @@
+.collector-settings-card {
+  min-width: 0;
+}
+
+.collector-table {
+  table-layout: fixed;
+  min-width: 620px;
+}
+
+.collector-table th:first-child {
+  width: 34%;
+}
+
+.collector-table th:nth-child(2) {
+  width: 12%;
+}
+
+.collector-table th:nth-child(3) {
+  width: 15%;
+}
+
+.collector-table th:nth-child(4) {
+  width: 27%;
+}
+
+.collector-table th:last-child {
+  width: 58px;
+}
+
+.collector-table td {
+  overflow-wrap: anywhere;
+  vertical-align: middle;
+}
+
+.collector-actions-cell {
+  text-align: center;
+  overflow-wrap: normal !important;
+}
+
+.collector-menu-trigger {
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  padding: 0;
+  letter-spacing: 2px;
+}
+
+.collector-action-menu .collector-menu-danger {
+  color: var(--danger);
+}
+
+@media (max-width: 1280px) {
+  .collector-settings-card {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 720px) {
+  .collector-table {
+    min-width: 560px;
+  }
+
+  .collector-table th,
+  .collector-table td {
+    padding-left: 9px;
+    padding-right: 9px;
+  }
+}

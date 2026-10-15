@@ -1,6 +1,6 @@
 <!doctype html>
 <html>
-<head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Settings | AITSM</title><link rel='stylesheet' href='/shared/css/styles.css'><link rel='stylesheet' href='/modules/common/css/table-skeleton.css'></head>
+<head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Settings | AITSM</title><link rel='stylesheet' href='/shared/css/styles.css'><link rel='stylesheet' href='/modules/common/css/table-skeleton.css'><link rel='stylesheet' href='/settings/css/settings.css'></head>
 <body>
 <div class='app-layout'>
   <aside id='adminSidebar' class='sidebar'></aside>
@@ -57,7 +57,7 @@
         </div>
       </article>
 
-      <article class='card'>
+      <article class='card collector-settings-card'>
         <div class='card-head'><div><h3 class='section-title'>Windows Collector Installer</h3><p class='section-subtitle'>Create a one-click, company-managed collector package.</p></div><span class='card-icon'>EXE</span></div>
         <div class='form-grid single-col'>
           <div class='form-group'><label for='collectorName'>Collector name</label><input id='collectorName' value='Company Windows collector' maxlength='150'></div>
@@ -66,7 +66,7 @@
           <p class='small'>The download expires after 10 minutes and can enroll only one computer. Windows will request administrator approval during installation.</p>
           <div class='inline-actions'><button id='downloadCollectorBtn' class='btn btn-primary' type='button'>Download Windows Collector</button></div>
           <p id='collectorDownloadStatus' class='small' role='status'></p>
-          <div class='table-wrap'><table><thead><tr><th>Name</th><th>Scope</th><th>Status</th><th>Last seen</th><th>Action</th></tr></thead><tbody id='collectorRows'></tbody></table></div>
+          <div class='table-wrap collector-table-wrap'><table class='collector-table'><thead><tr><th>Name</th><th>Scope</th><th>Status</th><th>Last seen</th><th><span class='sr-only'>Actions</span></th></tr></thead><tbody id='collectorRows'></tbody></table></div>
         </div>
       </article>
     </section>
