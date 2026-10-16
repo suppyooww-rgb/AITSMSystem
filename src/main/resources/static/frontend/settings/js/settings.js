@@ -20,6 +20,25 @@ function setAiStatus(message, tone = 'neutral') {
 }
 function setAiButtonsDisabled(disabled) { ['aiTestConnectionBtn', 'aiSaveConfigBtn'].forEach(id => { const button = document.getElementById(id); if (button) button.disabled = disabled; }); }
 
+function refreshOllamaCommand() {
+  const model = document.getElementById('ollamaModel')?.value.trim() || 'qwen3:8b';
+  const command = document.getElementById('ollamaPullCommand');
+  if (command) command.textContent = `ollama pull ${model}`;
+}
+
+async function copyOllamaCommand() {
+  const command = document.getElementById('ollamaPullCommand')?.textContent || 'ollama pull qwen3:8b';
+  const button = document.getElementById('copyOllamaCommandBtn');
+  try {
+    await navigator.clipboard.writeText(command);
+    if (button) button.textContent = 'Copied';
+  } catch (_) {
+    setAiMessage('Unable to copy automatically. Select and copy the command manually.', true);
+  } finally {
+    if (button) window.setTimeout(() => { button.textContent = 'Copy command'; }, 1800);
+  }
+}
+
 async function loadSlaPolicies() {
   const policies = await fetchJsonOrThrow('/api/sla');
   document.getElementById('slaRows').innerHTML = policies.map(policy => `<tr>
@@ -70,14 +89,18 @@ async function saveAssetDetectionPrefixes() {
 async function loadAiConfig() {
   const data = await fetchJsonOrThrow('/api/ai/config');
   document.getElementById('aiModel').value = data.model || 'gemini-3.8-flash';
+  document.getElementById('ollamaModel').value = data.ollamaModel || 'qwen3:8b';
+  refreshOllamaCommand();
   setAiStatus('Not tested', 'neutral');
-  setAiMessage('Gemini credentials are configured securely on the server.');
+  setAiMessage('Gemini credentials are configured securely on the server. Ollama is not connected until the secure AI Bridge is implemented.');
 }
 async function saveAiConfig() {
   const model = document.getElementById('aiModel').value.trim();
+  const ollamaModel = document.getElementById('ollamaModel').value.trim();
   if (!model) return setAiMessage('A Gemini model is required.', true);
-  setAiButtonsDisabled(true); setAiMessage('Saving Gemini configuration...');
-  try { await fetchJsonOrThrow('/api/ai/config', { method: 'POST', body: JSON.stringify({ model }) }, true); setAiMessage('Gemini model saved.'); }
+  if (!ollamaModel) return setAiMessage('An Ollama model identifier is required.', true);
+  setAiButtonsDisabled(true); setAiMessage('Saving AI configuration...');
+  try { await fetchJsonOrThrow('/api/ai/config', { method: 'POST', body: JSON.stringify({ model, ollamaModel }) }, true); setAiMessage('AI model preferences saved. Ollama remains offline until the secure AI Bridge is installed.'); }
   catch (error) { setAiMessage(error.message || 'Unable to save Gemini configuration.', true); }
   finally { setAiButtonsDisabled(false); }
 }
@@ -227,6 +250,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('aiTestConnectionBtn')?.addEventListener('click', testAiConnection);
   document.getElementById('aiSaveConfigBtn')?.addEventListener('click', saveAiConfig);
   document.getElementById('downloadCollectorBtn')?.addEventListener('click', downloadCollectorInstaller);
+  document.getElementById('ollamaModel')?.addEventListener('input', refreshOllamaCommand);
+  document.getElementById('copyOllamaCommandBtn')?.addEventListener('click', copyOllamaCommand);
   try { await Promise.all([loadSlaPolicies(), loadAssetDetectionPrefixes(), loadAiConfig(), loadCollectors()]); }
   catch (error) { showAppAlert(error.message || 'Unable to load settings data'); }
 });

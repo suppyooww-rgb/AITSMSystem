@@ -81,6 +81,18 @@ Open `/security` to enroll or manage MFA, regenerate one-time recovery codes aft
 3. Review the summary and checklist.
 4. Edit the resolution draft before copying or using it. Generation never posts an update or changes ticket status automatically.
 
+### 3.8 Local AI Readiness
+
+The **Settings → AI Configuration** card includes an Ollama readiness section for administrators:
+
+1. Download Ollama only from the official Windows link shown in Settings.
+2. Enter the exact model identifier reported by `ollama list`; the initial recommendation is `qwen3:8b`.
+3. Copy and run the displayed `ollama pull` command on the Windows computer intended for local AI.
+4. Do not expose Ollama port `11434` to the internet. Keep it bound to `127.0.0.1`.
+5. The beta portal does not claim an Ollama connection until the signed AITSM AI Bridge is implemented and installed.
+
+SLA timers, breach handling, and deterministic risk scoring do not depend on Gemini or Ollama and remain available during AI-provider downtime.
+
 ---
 
 ## 4. Practical Workflow (Recommended)

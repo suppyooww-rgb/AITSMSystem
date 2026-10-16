@@ -29,12 +29,15 @@ import kotlinx.serialization.Serializable
 data class AIConfigResponse(
     val provider: String,
     val model: String,
-    val timeoutMillis: Long
+    val timeoutMillis: Long,
+    val ollamaModel: String,
+    val localBridgeAvailable: Boolean = false
 )
 
 @Serializable
 data class AIConfigUpdateRequest(
-    val model: String
+    val model: String,
+    val ollamaModel: String? = null
 )
 
 @Serializable

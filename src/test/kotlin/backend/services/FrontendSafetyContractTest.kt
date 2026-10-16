@@ -122,4 +122,19 @@ class FrontendSafetyContractTest {
         assertTrue(settingsStyles.contains(".collector-table"))
         assertFalse(settingsStyles.contains("grid-column: 1 / -1"))
     }
+
+    @Test fun `ollama readiness is explicit secure and does not pretend the bridge is connected`() {
+        val settingsHtml = Files.readString(Path.of("src/main/resources/static/frontend/settings/html/settings.html"))
+        val settingsScript = Files.readString(Path.of("src/main/resources/static/frontend/settings/js/settings.js"))
+
+        assertTrue(settingsHtml.contains("Local AI · Ollama"))
+        assertTrue(settingsHtml.contains("https://ollama.com/download/windows"))
+        assertTrue(settingsHtml.contains("Bridge not available yet"))
+        assertTrue(settingsHtml.contains("127.0.0.1:11434"))
+        assertTrue(settingsHtml.contains("Never expose port 11434"))
+        assertTrue(settingsHtml.contains("deterministic risk scoring continue to work"))
+        assertTrue(settingsScript.contains("ollama pull ${'$'}{model}"))
+        assertTrue(settingsScript.contains("Ollama remains offline until the secure AI Bridge is installed."))
+        assertFalse(settingsScript.contains("fetch('http://127.0.0.1:11434"))
+    }
 }

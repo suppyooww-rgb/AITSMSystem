@@ -15,8 +15,10 @@
     </div>
 
     <section class='settings-grid'>
-      <article class='card gemini-card'>
-        <div class='card-head'><h3 class='section-title'>Gemini AI Configuration</h3><span class='card-icon'>AI</span></div>
+      <article class='card ai-settings-card'>
+        <div class='card-head'><div><h3 class='section-title'>AI Configuration</h3><p class='section-subtitle'>Manage the hosted provider and prepare a secure local AI option.</p></div><span class='card-icon'>AI</span></div>
+        <section class='ai-provider-section' aria-labelledby='geminiProviderHeading'>
+          <div class='provider-heading'><div><h4 id='geminiProviderHeading'>Hosted AI · Gemini</h4><p class='small'>Used by the beta portal for AI assistance when the provider is available.</p></div><span class='status-pill status-pill-neutral'>Active provider</span></div>
         <div class='form-grid single-col'>
           <div class='form-group'>
             <label for='aiModel'>Model</label>
@@ -25,11 +27,41 @@
           </div>
           <div class='inline-actions'>
             <button id='aiTestConnectionBtn' class='btn btn-ghost' type='button'>Test Connection</button>
-            <button id='aiSaveConfigBtn' class='btn btn-primary' type='button'>Save Configuration</button>
+            <button id='aiSaveConfigBtn' class='btn btn-primary' type='button'>Save AI Configuration</button>
           </div>
           <div class='small'>Status: <span id='aiConnectionStatus' class='status-pill status-pill-neutral'>Unknown</span></div>
           <div id='aiConfigMessage' class='small'></div>
         </div>
+        </section>
+
+        <section class='ai-provider-section local-ai-section' aria-labelledby='ollamaProviderHeading'>
+          <div class='provider-heading'><div><h4 id='ollamaProviderHeading'>Local AI · Ollama</h4><p class='small'>Readiness settings only. The secure Windows AI Bridge is the next implementation stage.</p></div><span id='ollamaBridgeStatus' class='status-pill status-pill-warning'>Bridge not available yet</span></div>
+          <div class='form-grid single-col'>
+            <div class='form-group'>
+              <label for='ollamaModel'>Preferred Ollama model</label>
+              <input id='ollamaModel' value='qwen3:8b' maxlength='150' autocomplete='off' aria-describedby='ollamaModelHelp'>
+              <div id='ollamaModelHelp' class='small'>Use the exact model identifier shown by <code>ollama list</code>.</div>
+            </div>
+            <div class='ollama-command-row'>
+              <code id='ollamaPullCommand'>ollama pull qwen3:8b</code>
+              <button id='copyOllamaCommandBtn' class='btn btn-ghost' type='button'>Copy command</button>
+            </div>
+            <ol class='readiness-list'>
+              <li>Install Ollama on the Windows computer that will run local AI.</li>
+              <li>Download the selected model using the command above.</li>
+              <li>Wait for the signed AITSM AI Bridge before connecting this computer to the beta portal.</li>
+            </ol>
+            <div class='inline-actions'>
+              <a class='btn btn-ghost' href='https://ollama.com/download/windows' target='_blank' rel='noopener noreferrer'>Download Ollama for Windows</a>
+            </div>
+            <div class='local-ai-notice' role='note'>
+              <strong>Security:</strong> Keep Ollama on <code>127.0.0.1:11434</code>. Never expose port 11434 to the internet. The future bridge will use authenticated outbound HTTPS.
+            </div>
+            <div class='local-ai-notice local-ai-continuity' role='note'>
+              <strong>Service continuity:</strong> SLA timers, breach rules, and deterministic risk scoring continue to work even when Gemini or local AI is unavailable.
+            </div>
+          </div>
+        </section>
       </article>
 
       <article class='card'>

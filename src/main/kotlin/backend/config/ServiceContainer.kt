@@ -63,7 +63,7 @@ class ServiceContainer(application: Application) {
     val inventoryService = InventoryService(inventoryQueries, assetDetectionService)
     val monitoringService = MonitoringService(monitoringRepository, assetDetectionService, inventoryService)
     val aiService = AIService()
-    val aiConfigService = AIConfigService(application.environment.config)
+    val aiConfigService = AIConfigService(application.environment.config, systemSettingsQueries)
     private val aiProvider = GeminiProvider()
     val aiChatService = AIChatService(aiProvider, aiConfigService, aiConversationRepository)
     val ticketAiAdvisor = TicketAiAdvisor(ticketService, knowledgeRepo, aiProvider, aiConfigService)
