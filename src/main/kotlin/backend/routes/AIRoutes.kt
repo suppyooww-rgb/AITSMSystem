@@ -3,7 +3,6 @@ package backend.routes
 import backend.models.ai.AIChatRequest
 import backend.models.ai.TicketAiAnalysisRequest
 import backend.models.ai.AIConfigUpdateRequest
-import backend.models.ai.AIConnectionTestResponse
 import backend.models.ai.AITicketDraftRequest
 import backend.models.UserRole
 import backend.security.requireAuthenticated
@@ -105,21 +104,6 @@ fun Route.aiRoutes(chatService: AIChatService, configService: AIConfigService, t
         call.respond(configService.update(request))
     }
 
-    post("/api/ai/test") {
-        if (!call.requireRole(UserRole.ADMIN)) return@post
-        if (!call.requireReauthentication(reauthentication, ReauthScope.SECURITY_CONFIG)) return@post
-        val result = chatService.testConnection()
-        val response = if (result.ok) {
-            AIConnectionTestResponse(success = true, message = "Connected to Gemini successfully")
-        } else {
-            AIConnectionTestResponse(success = false, message = result.errorMessage ?: "Failed to connect to Gemini")
-        }
-        if (result.ok) {
-            call.respond(HttpStatusCode.OK, response)
-        } else {
-            call.respond(HttpStatusCode.BadGateway, response)
-        }
-    }
 }
 
 private fun ApplicationCall.resolveSessionId(): String {

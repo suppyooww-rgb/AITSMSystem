@@ -14,11 +14,7 @@ function setAiMessage(message, error = false) {
   const node = document.getElementById('aiConfigMessage');
   if (node) { node.textContent = message; node.classList.toggle('text-danger', error); }
 }
-function setAiStatus(message, tone = 'neutral') {
-  const node = document.getElementById('aiConnectionStatus');
-  if (node) { node.textContent = message; node.className = `status-pill status-pill-${tone}`; }
-}
-function setAiButtonsDisabled(disabled) { ['aiTestConnectionBtn', 'aiSaveConfigBtn'].forEach(id => { const button = document.getElementById(id); if (button) button.disabled = disabled; }); }
+function setAiButtonsDisabled(disabled) { const button = document.getElementById('aiSaveConfigBtn'); if (button) button.disabled = disabled; }
 
 function refreshOllamaCommand() {
   const model = document.getElementById('ollamaModel')?.value.trim() || 'qwen3:8b';
@@ -88,28 +84,16 @@ async function saveAssetDetectionPrefixes() {
 
 async function loadAiConfig() {
   const data = await fetchJsonOrThrow('/api/ai/config');
-  document.getElementById('aiModel').value = data.model || 'gemini-3.8-flash';
   document.getElementById('ollamaModel').value = data.ollamaModel || 'qwen3:8b';
   refreshOllamaCommand();
-  setAiStatus('Not tested', 'neutral');
-  setAiMessage('Gemini credentials are configured securely on the server. Ollama is not connected until the secure AI Bridge is implemented.');
+  setAiMessage('Model preference loaded. Ollama is not connected because the secure AI Bridge has not been implemented yet.');
 }
 async function saveAiConfig() {
-  const model = document.getElementById('aiModel').value.trim();
   const ollamaModel = document.getElementById('ollamaModel').value.trim();
-  if (!model) return setAiMessage('A Gemini model is required.', true);
   if (!ollamaModel) return setAiMessage('An Ollama model identifier is required.', true);
-  setAiButtonsDisabled(true); setAiMessage('Saving AI configuration...');
-  try { await fetchJsonOrThrow('/api/ai/config', { method: 'POST', body: JSON.stringify({ model, ollamaModel }) }, true); setAiMessage('AI model preferences saved. Ollama remains offline until the secure AI Bridge is installed.'); }
-  catch (error) { setAiMessage(error.message || 'Unable to save Gemini configuration.', true); }
-  finally { setAiButtonsDisabled(false); }
-}
-async function testAiConnection() {
-  setAiButtonsDisabled(true); setAiMessage('Testing Gemini connection...');
-  try {
-    const data = await fetchJsonOrThrow('/api/ai/test', { method: 'POST', body: '{}' }, true);
-    setAiStatus('Connected', 'ok'); setAiMessage(data.message || 'Gemini connection successful.');
-  } catch (error) { setAiStatus('Unavailable', 'fail'); setAiMessage(error.message || 'Unable to connect to Gemini.', true); }
+  setAiButtonsDisabled(true); setAiMessage('Saving Ollama model preference...');
+  try { await fetchJsonOrThrow('/api/ai/config', { method: 'POST', body: JSON.stringify({ ollamaModel }) }, true); setAiMessage('Ollama model preference saved. Local AI remains unavailable until the secure AI Bridge is installed.'); }
+  catch (error) { setAiMessage(error.message || 'Unable to save the Ollama model preference.', true); }
   finally { setAiButtonsDisabled(false); }
 }
 
@@ -247,7 +231,6 @@ async function archiveCollector(id) {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-  document.getElementById('aiTestConnectionBtn')?.addEventListener('click', testAiConnection);
   document.getElementById('aiSaveConfigBtn')?.addEventListener('click', saveAiConfig);
   document.getElementById('downloadCollectorBtn')?.addEventListener('click', downloadCollectorInstaller);
   document.getElementById('ollamaModel')?.addEventListener('input', refreshOllamaCommand);

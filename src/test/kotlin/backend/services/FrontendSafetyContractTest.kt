@@ -127,14 +127,19 @@ class FrontendSafetyContractTest {
         val settingsHtml = Files.readString(Path.of("src/main/resources/static/frontend/settings/html/settings.html"))
         val settingsScript = Files.readString(Path.of("src/main/resources/static/frontend/settings/js/settings.js"))
 
-        assertTrue(settingsHtml.contains("Local AI · Ollama"))
+        assertTrue(settingsHtml.contains("Local AI Readiness"))
+        assertTrue(settingsHtml.contains("id='ollamaProviderHeading'>Ollama"))
         assertTrue(settingsHtml.contains("https://ollama.com/download/windows"))
-        assertTrue(settingsHtml.contains("Bridge not available yet"))
+        assertTrue(settingsHtml.contains("Not connected · bridge pending"))
         assertTrue(settingsHtml.contains("127.0.0.1:11434"))
         assertTrue(settingsHtml.contains("Never expose port 11434"))
-        assertTrue(settingsHtml.contains("deterministic risk scoring continue to work"))
+        assertTrue(settingsHtml.contains("deterministic risk scoring"))
+        assertFalse(settingsHtml.contains("Gemini"))
+        assertFalse(settingsHtml.contains("aiTestConnectionBtn"))
         assertTrue(settingsScript.contains("ollama pull ${'$'}{model}"))
-        assertTrue(settingsScript.contains("Ollama remains offline until the secure AI Bridge is installed."))
+        assertTrue(settingsScript.contains("Local AI remains unavailable until the secure AI Bridge is installed."))
+        assertFalse(settingsScript.contains("/api/ai/test"))
+        assertFalse(settingsScript.contains("Gemini"))
         assertFalse(settingsScript.contains("fetch('http://127.0.0.1:11434"))
     }
 }

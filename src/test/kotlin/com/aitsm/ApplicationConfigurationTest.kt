@@ -19,8 +19,6 @@ class ApplicationConfigurationTest {
         "SMTP_PASSWORD" to "not-a-real-smtp-password",
         "SMTP_FROM" to "no-reply@example.com",
         "SMTP_STARTTLS" to "true",
-        "GEMINI_API_KEY" to "not-a-real-api-key",
-        "AI_PROVIDER" to "gemini",
         "AUTH_EXPOSE_DEV_VERIFICATION_CODE" to "false"
     )
 

@@ -91,7 +91,7 @@ The **Settings → AI Configuration** card includes an Ollama readiness section 
 4. Do not expose Ollama port `11434` to the internet. Keep it bound to `127.0.0.1`.
 5. The beta portal does not claim an Ollama connection until the signed AITSM AI Bridge is implemented and installed.
 
-SLA timers, breach handling, and deterministic risk scoring do not depend on Gemini or Ollama and remain available during AI-provider downtime.
+SLA timers, breach handling, and deterministic risk scoring do not depend on Ollama and remain available while the AI Bridge is unavailable.
 
 ---
 
@@ -111,8 +111,8 @@ SLA timers, breach handling, and deterministic risk scoring do not depend on Gem
 - Reset password if needed.
 
 ### AI assistant shows fallback panel
-- The hosted Gemini AI service may be temporarily unavailable, rate limited, or timed out.
-- You can still create a ticket draft from fallback guidance.
+- This is expected until the secure AITSM AI Bridge is implemented and connected to local Ollama.
+- You can still create a ticket draft from deterministic fallback guidance.
 
 ### No monitoring data
 - Confirm a collector is enrolled, running inside the target LAN, and allowed outbound HTTPS access.

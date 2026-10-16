@@ -14,20 +14,20 @@ import backend.services.TicketService
 import kotlinx.serialization.Serializable
 
 @Serializable
-private data class GeminiKnowledgeChoice(val id: Int, val relevance: String)
+private data class ProviderKnowledgeChoice(val id: Int, val relevance: String)
 
 @Serializable
-private data class GeminiTicketAnalysis(
+private data class ProviderTicketAnalysis(
     val title: String,
     val description: String,
     val category: String,
     val priority: String,
     val affectedService: String,
-    val knowledgeRecommendations: List<GeminiKnowledgeChoice> = emptyList()
+    val knowledgeRecommendations: List<ProviderKnowledgeChoice> = emptyList()
 )
 
 @Serializable
-private data class GeminiTicketAssistancePayload(
+private data class ProviderTicketAssistancePayload(
     val summary: String,
     val resolutionDraft: String,
     val troubleshootingChecklist: List<String> = emptyList()
@@ -66,7 +66,7 @@ class TicketAiAdvisor(
                 AIMessage("user", ticketAnalysisPrompt(cleanInput, candidates))
             )
         )
-        val parsed = if (result.ok) AIJsonSupport.decodeObject<GeminiTicketAnalysis>(result.content) else null
+        val parsed = if (result.ok) AIJsonSupport.decodeObject<ProviderTicketAnalysis>(result.content) else null
         val suggestion = parsed?.let { normalizeSuggestion(it, cleanInput) } ?: fallback
         val recommendations = if (parsed != null) {
             mapKnowledgeRecommendations(parsed.knowledgeRecommendations, candidates)
@@ -79,8 +79,8 @@ class TicketAiAdvisor(
             knowledgeIds = recommendations.map { it.id },
             knowledgeArticles = recommendations,
             duplicates = duplicates(cleanInput, tickets.allForAdvisory()),
-            source = if (parsed != null) "gemini" else "fallback",
-            fallbackReason = if (parsed == null) result.errorMessage ?: "Gemini returned an invalid structured response." else null
+            source = if (parsed != null) cfg.provider else "fallback",
+            fallbackReason = if (parsed == null) result.errorMessage ?: "Local AI returned an invalid structured response." else null
         )
     }
 
@@ -115,7 +115,7 @@ $historyText
                 )
             )
         )
-        val parsed = if (result.ok) AIJsonSupport.decodeObject<GeminiTicketAssistancePayload>(result.content) else null
+        val parsed = if (result.ok) AIJsonSupport.decodeObject<ProviderTicketAssistancePayload>(result.content) else null
         val fallback = localAssistance(ticket)
         return TicketAiAssistance(
             ticketId = ticket.id,
@@ -128,8 +128,8 @@ $historyText
                 ?.takeIf { it.isNotEmpty() }
                 ?: fallback.troubleshootingChecklist,
             advisory = "AI-generated draft only — an administrator must review and edit it before using it in a ticket response or resolution.",
-            source = if (parsed != null) "gemini" else "fallback",
-            fallbackReason = if (parsed == null) result.errorMessage ?: "Gemini returned an invalid structured response." else null
+            source = if (parsed != null) cfg.provider else "fallback",
+            fallbackReason = if (parsed == null) result.errorMessage ?: "Local AI returned an invalid structured response." else null
         )
     }
 
@@ -149,7 +149,7 @@ $historyText
         return TicketAiSuggestion(title.take(200), input.description, category, priority, category, "Fallback suggestion only — review and edit before creating the ticket.")
     }
 
-    private fun normalizeSuggestion(value: GeminiTicketAnalysis, input: TicketAiAnalysisRequest): TicketAiSuggestion {
+    private fun normalizeSuggestion(value: ProviderTicketAnalysis, input: TicketAiAnalysisRequest): TicketAiSuggestion {
         val category = canonical(value.category, allowedCategories, localSuggestion(input).category)
         val priority = canonical(value.priority, allowedPriorities, "Medium")
         return TicketAiSuggestion(
@@ -158,7 +158,7 @@ $historyText
             category = category,
             priority = priority,
             affectedService = value.affectedService.trim().ifBlank { category }.take(120),
-            advisory = "Gemini suggestion only — review and edit before creating the ticket."
+            advisory = "AI suggestion only — review and edit before creating the ticket."
         )
     }
 
@@ -174,7 +174,7 @@ $historyText
         return if (matching.isNotEmpty()) matching else ranked.take(8).map { it.first }
     }
 
-    private fun mapKnowledgeRecommendations(choices: List<GeminiKnowledgeChoice>, candidates: List<KnowledgeArticle>): List<KnowledgeRecommendation> {
+    private fun mapKnowledgeRecommendations(choices: List<ProviderKnowledgeChoice>, candidates: List<KnowledgeArticle>): List<KnowledgeRecommendation> {
         val byId = candidates.associateBy { it.id }
         return choices.distinctBy { it.id }.mapNotNull { choice ->
             val article = byId[choice.id] ?: return@mapNotNull null
@@ -201,7 +201,7 @@ $historyText
         ),
         "Fallback draft only — an administrator must review and edit it before use.",
         "fallback",
-        "Gemini assistance was unavailable."
+        "Local AI assistance is pending the secure bridge."
     )
 
     private fun ticketAnalysisPrompt(input: TicketAiAnalysisRequest, articles: List<KnowledgeArticle>): String {

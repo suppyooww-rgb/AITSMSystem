@@ -253,7 +253,7 @@ internal fun validateRuntimeConfiguration(appEnv: String, value: (String) -> Str
     val required = listOf(
         "DB_URL", "DB_USER", "DB_PASSWORD", "APP_BASE_URL", "COMPANY_NAME",
         "CORS_ALLOWED_ORIGINS", "MFA_ENCRYPTION_KEY", "SMTP_HOST", "SMTP_PORT",
-        "SMTP_USERNAME", "SMTP_PASSWORD", "SMTP_FROM", "SMTP_STARTTLS", "GEMINI_API_KEY"
+        "SMTP_USERNAME", "SMTP_PASSWORD", "SMTP_FROM", "SMTP_STARTTLS"
     )
     val missing = required.filter { value(it).isNullOrBlank() }
     require(missing.isEmpty()) { "Missing mandatory production configuration: ${missing.joinToString(", ")}" }
@@ -296,7 +296,6 @@ internal fun validateRuntimeConfiguration(appEnv: String, value: (String) -> Str
     }
     require((value("SMTP_PORT")?.toIntOrNull() ?: 0) in 1..65535) { "SMTP_PORT must be a valid TCP port" }
     require(value("SMTP_STARTTLS").equals("true", true)) { "SMTP_STARTTLS must be true in production" }
-    require((value("AI_PROVIDER") ?: "gemini").equals("gemini", true)) { "AI_PROVIDER must be gemini" }
     require((value("DEPLOYMENT_ENV") ?: "production").lowercase() in setOf("production", "beta")) {
         "DEPLOYMENT_ENV must be production or beta"
     }

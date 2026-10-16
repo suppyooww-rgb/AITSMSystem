@@ -10,7 +10,7 @@ Commands are written for PowerShell and must be run from the repository root. Re
 2. Install the current [Google Cloud CLI](https://cloud.google.com/sdk/docs/install).
 3. Install PostgreSQL command-line tools so `psql` is available.
 4. Download the current [Cloud SQL Auth Proxy for Windows](https://cloud.google.com/sql/docs/postgres/connect-auth-proxy) as `cloud-sql-proxy.exe`.
-5. Prepare a verified SMTP sender, SMTP credentials, Gemini API key, strong initial super-admin password, and an NVD API key for GitHub Actions.
+5. Prepare a verified SMTP sender, SMTP credentials, strong initial super-admin password, and an NVD API key for GitHub Actions.
 
 Use one region for Cloud Run, Artifact Registry, Cloud SQL, and the uploads bucket. `asia-southeast1` (Singapore) is a reasonable starting point for the Philippines, but confirm availability and cost for your organization.
 
@@ -219,7 +219,6 @@ In **Google Cloud Console → Security → Secret Manager**, create these secret
 | --- | --- |
 | `aitsm-db-password` | password for `$DB_RUNTIME_USER` |
 | `aitsm-mfa-key` | base64-encoded 32-byte key |
-| `aitsm-gemini-key` | Gemini API key |
 | `aitsm-smtp-username` | SMTP username |
 | `aitsm-smtp-password` | SMTP password/API key |
 | `aitsm-superadmin-password` | temporary initial admin password of at least 16 characters |
@@ -240,7 +239,6 @@ Grant access only to the runtime identity:
 $secretNames = @(
   "aitsm-db-password",
   "aitsm-mfa-key",
-  "aitsm-gemini-key",
   "aitsm-smtp-username",
   "aitsm-smtp-password",
   "aitsm-superadmin-password"
@@ -307,8 +305,8 @@ gcloud run deploy $SERVICE `
   --timeout=300 `
   --min-instances=1 `
   --max-instances=5 `
-  --set-env-vars="APP_ENV=production,DB_URL=$DB_URL,DB_USER=$DB_RUNTIME_USER,APP_BASE_URL=$PLACEHOLDER_ORIGIN,CORS_ALLOWED_ORIGINS=$PLACEHOLDER_ORIGIN,COMPANY_NAME=$COMPANY_NAME,AI_PROVIDER=gemini,GEMINI_MODEL=gemini-3.8-flash,SMTP_HOST=smtp-relay.brevo.com,SMTP_PORT=587,SMTP_FROM=$SMTP_FROM,SMTP_FROM_NAME=AITSM No Reply,SMTP_STARTTLS=true,AUTH_EXPOSE_DEV_VERIFICATION_CODE=false,PROFILE_UPLOAD_DIR=/app/uploads/profile-photos,BOOTSTRAP_SUPERADMIN=true,SUPERADMIN_EMAIL=$SUPERADMIN_EMAIL,SUPERADMIN_NAME=System Super Admin,SUPERADMIN_COMPANY=$COMPANY_NAME,SUPERADMIN_DEPARTMENT=Platform" `
-  --set-secrets="DB_PASSWORD=aitsm-db-password:1,MFA_ENCRYPTION_KEY=aitsm-mfa-key:1,GEMINI_API_KEY=aitsm-gemini-key:1,SMTP_USERNAME=aitsm-smtp-username:1,SMTP_PASSWORD=aitsm-smtp-password:1,SUPERADMIN_PASSWORD=aitsm-superadmin-password:1" `
+  --set-env-vars="APP_ENV=production,DB_URL=$DB_URL,DB_USER=$DB_RUNTIME_USER,APP_BASE_URL=$PLACEHOLDER_ORIGIN,CORS_ALLOWED_ORIGINS=$PLACEHOLDER_ORIGIN,COMPANY_NAME=$COMPANY_NAME,OLLAMA_MODEL=qwen3:8b,SMTP_HOST=smtp-relay.brevo.com,SMTP_PORT=587,SMTP_FROM=$SMTP_FROM,SMTP_FROM_NAME=AITSM No Reply,SMTP_STARTTLS=true,AUTH_EXPOSE_DEV_VERIFICATION_CODE=false,PROFILE_UPLOAD_DIR=/app/uploads/profile-photos,BOOTSTRAP_SUPERADMIN=true,SUPERADMIN_EMAIL=$SUPERADMIN_EMAIL,SUPERADMIN_NAME=System Super Admin,SUPERADMIN_COMPANY=$COMPANY_NAME,SUPERADMIN_DEPARTMENT=Platform" `
+  --set-secrets="DB_PASSWORD=aitsm-db-password:1,MFA_ENCRYPTION_KEY=aitsm-mfa-key:1,SMTP_USERNAME=aitsm-smtp-username:1,SMTP_PASSWORD=aitsm-smtp-password:1,SUPERADMIN_PASSWORD=aitsm-superadmin-password:1" `
   --add-volume="mount-path=/app/uploads,type=cloud-storage,bucket=$BUCKET,readonly=false,mount-options=uid=10001;gid=10001"
 ```
 
@@ -389,7 +387,7 @@ Test with separate administrator and end-user accounts:
 6. Knowledge creation and end-user reading.
 7. User approval, role management, and deactivation.
 8. Assets, monitoring, inventory, SLA, and Settings.
-9. Gemini chat, ticket analysis, configuration testing, and rate limiting.
+9. Deterministic AI fallback behavior, Ollama readiness settings, and rate limiting. Do not claim local AI connectivity before the secure bridge is installed.
 10. Profile-photo upload, approval, display, and persistence after a new revision.
 11. Colleague requests and messaging in two browser sessions.
 12. From each role, create and download the Windows collector package. Confirm end users receive `SELF` scope, administrators can receive `LAN` scope, the enrollment redeems only once, the Windows service starts automatically, an HTTPS report is accepted, health changes to Online, and revocation causes later reports to receive HTTP 401.
@@ -410,7 +408,7 @@ Protected resources must return `401`, `403`, or redirect to login—not applica
 gcloud run services logs read $SERVICE --region=$REGION --limit=300
 ```
 
-Investigate every unexpected `500`. Logs must not contain passwords, cookies, CSRF values, MFA secrets, recovery codes, reset tokens, SMTP credentials, or Gemini credentials.
+Investigate every unexpected `500`. Logs must not contain passwords, cookies, CSRF values, MFA secrets, recovery codes, reset tokens, SMTP credentials, or future AI Bridge credentials.
 
 ## 15. Custom domain
 
@@ -458,7 +456,7 @@ Application and database rollback are separate. If a migration is incompatible w
 - Migrations complete with `ON_ERROR_STOP=1`.
 - Cloud Run is healthy with the final HTTPS origin.
 - Admin and end-user smoke tests pass.
-- SMTP and Gemini tests pass.
+- SMTP and deterministic AI fallback tests pass.
 - Bootstrap credentials are disabled and destroyed.
 - Logs contain no secrets or unexplained `500` responses.
 - A known-good revision and database recovery plan are available.

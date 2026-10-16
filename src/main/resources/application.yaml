@@ -6,7 +6,7 @@ ktor:
     port: ${PORT:8070}
 
 ai:
-  provider: ${AI_PROVIDER:gemini}
-  gemini:
-    model: ${GEMINI_MODEL:gemini-3.8-flash}
+  provider: ollama
+  ollama:
+    model: ${OLLAMA_MODEL:qwen3:8b}
   timeoutMillis: ${AI_TIMEOUT_MILLIS:60000}

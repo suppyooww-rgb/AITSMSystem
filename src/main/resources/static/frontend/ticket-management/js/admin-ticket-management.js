@@ -124,7 +124,7 @@ function renderAdminTicketAiContext() {
   }
   document.getElementById('adminTicketAiStatus').textContent = isClosed
     ? 'This ticket is closed. You can generate and copy assistance, but reopen it before saving a new resolution.'
-    : 'Generate a reviewable Gemini summary and resolution draft. Saving requires confirmation.';
+    : 'Generate reviewable assistance. Until the local AI Bridge is available, deterministic fallback guidance is used.';
 }
 
 async function generateAdminTicketAssistance() {
@@ -135,7 +135,7 @@ async function generateAdminTicketAssistance() {
   if (!(ticketId > 0) || !button || !status || !results) return;
   button.disabled = true;
   status.classList.remove('text-danger', 'text-success');
-  status.textContent = 'Gemini is summarizing the ticket and preparing a reviewable draft…';
+  status.textContent = 'Preparing a reviewable summary and resolution draft…';
   results.classList.add('hidden');
   try {
     const response = await fetch(`/api/ai/tickets/${ticketId}/assist`, { method: 'POST', headers: authHeaders() });
@@ -152,10 +152,10 @@ async function generateAdminTicketAssistance() {
       checklist.appendChild(item);
     });
     results.classList.remove('hidden');
-    status.classList.add(data.source === 'gemini' ? 'text-success' : 'text-danger');
-    status.textContent = data.source === 'gemini'
-      ? 'Gemini assistance generated. Review and edit it before use.'
-      : `Fallback guidance shown: ${data.fallbackReason || 'Gemini was unavailable.'}`;
+    status.classList.add(data.source === 'fallback' ? 'text-danger' : 'text-success');
+    status.textContent = data.source === 'fallback'
+      ? `Fallback guidance shown: ${data.fallbackReason || 'The local AI Bridge is not available.'}`
+      : 'Local AI assistance generated. Review and edit it before use.';
   } catch (error) {
     status.classList.add('text-danger');
     status.textContent = error.message;

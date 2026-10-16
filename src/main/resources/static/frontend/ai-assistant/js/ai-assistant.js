@@ -143,9 +143,9 @@ function applyAiResponse(payload, userMessage) {
   }
 
   const source = payload.source;
-  if (source === 'gemini' && typeof payload.reply === 'string' && payload.reply.trim()) {
+  if (source !== 'fallback' && typeof payload.reply === 'string' && payload.reply.trim()) {
     addAssistantReply(payload.reply.trim());
-    aiState.lastVisible = { type: 'gemini', reply: payload.reply.trim() };
+    aiState.lastVisible = { type: 'ai', reply: payload.reply.trim() };
     saveState();
     renderMessages();
     renderFallbackPanel();
@@ -171,14 +171,14 @@ function applyAiResponse(payload, userMessage) {
 
 function localFallback(reason, userMessage) {
   return {
-    message: 'I’m currently unable to process a full diagnosis because the hosted AI service is unavailable. Please retry shortly.',
+    message: 'Local AI is unavailable until the secure AITSM AI Bridge is installed. You can continue with fallback guidance or create a support ticket.',
     issueSummary: userMessage || 'Unable to process request',
-    likelyCauses: [reason || 'Hosted AI service temporarily unavailable'],
-    troubleshootingSteps: ['Retry after a short wait', 'Contact an administrator if the issue continues'],
-    escalationCriteria: ['Escalate if service remains unavailable for critical support cases'],
+    likelyCauses: [reason || 'Secure local AI bridge is not available'],
+    troubleshootingSteps: ['Continue with the fallback checklist', 'Contact an administrator if local AI assistance is required'],
+    escalationCriteria: ['Escalate when technician diagnosis is required'],
     suggestedPriority: 'Medium',
     ticketTitle: 'AI assistant unavailable',
-    ticketDescription: 'AI assistant request failed because the hosted AI service was unavailable.'
+    ticketDescription: 'Local AI assistance is pending the secure AITSM AI Bridge. Continue with manual troubleshooting and technician review.'
   };
 }
 
@@ -245,7 +245,7 @@ function draftFromVisible() {
   const lastUser = aiState.messages.filter((m) => m.role === 'user').slice(-1)[0]?.content || '';
   if (!visible) return null;
 
-  if (visible.type === 'gemini' && visible.reply) {
+  if (visible.type === 'ai' && visible.reply) {
     return {
       title: 'AI-assisted IT support request',
       description: visible.reply,

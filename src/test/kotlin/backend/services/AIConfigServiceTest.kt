@@ -17,7 +17,7 @@ class AIConfigServiceTest {
     }
 
     private fun config() = MapApplicationConfig(
-        "ai.gemini.model" to "gemini-3.8-flash",
+        "ai.ollama.model" to "qwen3:8b",
         "ai.timeoutMillis" to "60000"
     )
 
@@ -29,7 +29,7 @@ class AIConfigServiceTest {
         assertEquals("qwen3:8b", service.snapshot().ollamaModel)
         assertFalse(service.snapshot().localBridgeAvailable)
 
-        val updated = service.update(AIConfigUpdateRequest("gemini-flash-latest", "qwen3:14b"))
+        val updated = service.update(AIConfigUpdateRequest("qwen3:14b"))
         assertEquals("qwen3:14b", updated.ollamaModel)
         assertEquals("qwen3:14b", AIConfigService(config(), store).snapshot().ollamaModel)
     }
@@ -39,7 +39,7 @@ class AIConfigServiceTest {
         val service = AIConfigService(config(), InMemorySettingsStore())
 
         assertFailsWith<IllegalArgumentException> {
-            service.update(AIConfigUpdateRequest("gemini-flash-latest", "http://localhost:11434; stop"))
+            service.update(AIConfigUpdateRequest("http://localhost:11434; stop"))
         }
     }
 }

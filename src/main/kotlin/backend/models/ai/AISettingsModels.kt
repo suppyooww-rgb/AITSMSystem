@@ -36,14 +36,7 @@ data class AIConfigResponse(
 
 @Serializable
 data class AIConfigUpdateRequest(
-    val model: String,
-    val ollamaModel: String? = null
-)
-
-@Serializable
-data class AIConnectionTestResponse(
-    val success: Boolean,
-    val message: String
+    val ollamaModel: String
 )
 
 @Serializable

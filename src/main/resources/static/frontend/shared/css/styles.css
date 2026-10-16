@@ -1451,7 +1451,6 @@ body.global-search-open { overflow:hidden; }
 .status-pill-ok { background: #dcfce7; color: #166534; }
 .status-pill-fail { background: #fee2e2; color: #991b1b; }
 
-.gemini-card .inline-actions { flex-wrap: wrap; }
 
 /* Fail visibly and keep content usable if a role shell is delayed or cannot load. */
 .utility-bar:empty::after {

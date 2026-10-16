@@ -9,7 +9,6 @@ import java.util.concurrent.atomic.AtomicReference
 
 private data class AIConfigState(
     val provider: String,
-    val model: String,
     val timeoutMillis: Long,
     val ollamaModel: String
 )
@@ -21,14 +20,11 @@ class AIConfigService(
     private val defaultOllamaModel = "qwen3:8b"
     private val state = AtomicReference(
         AIConfigState(
-            provider = "gemini",
-            model = envOrConfig("GEMINI_MODEL", config, "ai.gemini.model") ?: "gemini-3.8-flash",
+            provider = "ollama",
             timeoutMillis = (envOrConfig("AI_TIMEOUT_MILLIS", config, "ai.timeoutMillis")?.toLongOrNull() ?: 60_000L)
                 .coerceIn(5_000L, 120_000L),
-            ollamaModel = settingsStore?.getByKey(OLLAMA_MODEL_KEY)
-                ?.trim()
-                ?.takeIf(::isValidOllamaModel)
-                ?: Env.get("OLLAMA_MODEL")?.trim()?.takeIf(::isValidOllamaModel)
+            ollamaModel = settingsStore?.getByKey(OLLAMA_MODEL_KEY)?.trim()?.takeIf(::isValidOllamaModel)
+                ?: envOrConfig("OLLAMA_MODEL", config, "ai.ollama.model")?.takeIf(::isValidOllamaModel)
                 ?: defaultOllamaModel
         )
     )
@@ -39,21 +35,18 @@ class AIConfigService(
     }
 
     fun update(request: AIConfigUpdateRequest): AIConfigResponse {
-        val model = request.model.trim()
-        require(model.isNotBlank()) { "Model selection is required" }
-        require(model.matches(Regex("(?:models/)?[A-Za-z0-9][A-Za-z0-9._-]{1,99}"))) { "Model selection is invalid" }
-
-        val ollamaModel = request.ollamaModel?.trim()?.takeIf { it.isNotBlank() } ?: state.get().ollamaModel
+        val ollamaModel = request.ollamaModel.trim()
+        require(ollamaModel.isNotBlank()) { "Ollama model selection is required" }
         require(isValidOllamaModel(ollamaModel)) { "Ollama model selection is invalid" }
 
         settingsStore?.upsert(OLLAMA_MODEL_KEY, ollamaModel)
-        val updated = state.updateAndGet { it.copy(model = model, ollamaModel = ollamaModel) }
+        val updated = state.updateAndGet { it.copy(ollamaModel = ollamaModel) }
         return updated.toResponse()
     }
 
     private fun AIConfigState.toResponse() = AIConfigResponse(
         provider = provider,
-        model = model,
+        model = ollamaModel,
         timeoutMillis = timeoutMillis,
         ollamaModel = ollamaModel,
         localBridgeAvailable = false
