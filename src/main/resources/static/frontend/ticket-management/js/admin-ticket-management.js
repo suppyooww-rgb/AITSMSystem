@@ -112,25 +112,34 @@ function renderAdminTicketAiContext() {
   const savedText = document.getElementById('adminTicketSavedResolutionText');
   const savedMeta = document.getElementById('adminTicketSavedResolutionMeta');
   const saveButton = document.getElementById('saveTicketAiDraftBtn');
-  const isClosed = normalizeStatus(ticket.status) === 'closed';
+  const generateButton = document.getElementById('generateTicketAiBtn');
+  const isTerminal = ['resolved', 'closed'].includes(normalizeStatus(ticket.status));
   const ownedByMe = Number(ticket.assignedToUserId || 0) === Number(window.currentUser?.id || 0);
   const superAdmin = String(window.currentUser?.role || '').toUpperCase() === 'SUPERADMIN';
   const canEdit = ownedByMe || superAdmin;
+  const canGenerate = !isTerminal && canEdit;
   saved?.classList.toggle('hidden', !ticket.reviewedResolution);
   if (savedText) savedText.textContent = ticket.reviewedResolution || '';
   if (savedMeta) savedMeta.textContent = ticket.reviewedResolution
     ? `Last saved ${formatDate(ticket.resolutionUpdatedAt)}${ticket.resolutionUpdatedBy ? ` by ${ticket.resolutionUpdatedBy}` : ''}.`
     : '';
   if (saveButton) {
-    saveButton.disabled = isClosed || !canEdit;
-    saveButton.title = isClosed
+    saveButton.disabled = isTerminal || !canEdit;
+    saveButton.title = isTerminal
       ? 'Reopen the ticket before saving a new resolution.'
       : (!canEdit ? `Only ${ticket.assignedTo || 'the assigned administrator'} can save a resolution.` : '');
   }
-  document.getElementById('adminTicketAiStatus').textContent = isClosed
-    ? 'This ticket is closed. You can generate and copy assistance, but reopen it before saving a new resolution.'
+  if (generateButton) {
+    generateButton.classList.toggle('hidden', !canGenerate);
+    generateButton.disabled = !canGenerate;
+    generateButton.title = isTerminal
+      ? 'Resolved and closed tickets cannot generate new assistance.'
+      : (!canEdit ? `Only ${ticket.assignedTo || 'the assigned administrator'} can generate assistance.` : '');
+  }
+  document.getElementById('adminTicketAiStatus').textContent = isTerminal
+    ? 'This ticket is complete. Saved assistance and activity remain available as read-only history.'
     : (!canEdit
-      ? `${ticket.assignedTo ? `Handled by ${ticket.assignedTo}. ` : 'This ticket is unassigned. '}You may review assistance, but only the owner can save changes.`
+      ? `${ticket.assignedTo ? `Handled by ${ticket.assignedTo}. ` : 'This ticket is unassigned. '}Only the assigned administrator can generate or save assistance.`
       : `${superAdmin && !ownedByMe ? 'Super Admin override is available. ' : ''}Generate reviewable assistance. Until the local AI Bridge is available, deterministic fallback guidance is used.`);
   loadAdminTicketHistory(ticket.id);
 }

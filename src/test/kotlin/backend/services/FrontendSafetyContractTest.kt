@@ -114,6 +114,18 @@ class FrontendSafetyContractTest {
         assertTrue(tickets.contains("Legacy \${statusLabel(ticket.status)} ticket"))
     }
 
+    @Test fun `ticket assistance is limited to active owned tickets with super admin override`() {
+        val frontend = Files.readString(Path.of("src/main/resources/static/frontend/ticket-management/js/admin-ticket-management.js"))
+        val routes = Files.readString(Path.of("src/main/kotlin/backend/routes/AIRoutes.kt"))
+        val service = Files.readString(Path.of("src/main/kotlin/backend/services/TicketService.kt"))
+
+        assertTrue(frontend.contains("const canGenerate = !isTerminal && canEdit"))
+        assertTrue(frontend.contains("generateButton.classList.toggle('hidden', !canGenerate)"))
+        assertTrue(routes.contains("ticket.status in setOf(TicketStatus.RESOLVED, TicketStatus.CLOSED)"))
+        assertTrue(routes.contains("actor.role != UserRole.SUPERADMIN && ticket.assignedToUserId != actor.id"))
+        assertTrue(service.contains("existing.status !in setOf(TicketStatus.RESOLVED, TicketStatus.CLOSED)"))
+    }
+
     @Test fun `device surfaces are collector only and inventory details are click through`() {
         val monitoring = Files.readString(Path.of("src/main/kotlin/backend/services/MonitoringService.kt"))
         val inventoryService = Files.readString(Path.of("src/main/kotlin/backend/services/InventoryService.kt"))

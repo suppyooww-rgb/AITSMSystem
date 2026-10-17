@@ -184,7 +184,7 @@ class TicketService(
     fun updateResolution(id: Int, resolutionValue: String, actor: String, userId: Int?, role: UserRole): Ticket? {
         val existing = repository.get(id) ?: return null
         if (role != UserRole.SUPERADMIN) requireTicketOwner(existing, userId)
-        require(existing.status != TicketStatus.CLOSED) { "Closed tickets cannot accept a new resolution draft" }
+        require(existing.status !in setOf(TicketStatus.RESOLVED, TicketStatus.CLOSED)) { "Resolved or closed tickets cannot accept a new resolution draft" }
         val resolution = resolutionValue.trim()
         require(resolution.isNotBlank()) { "Resolution is required" }
         require(resolution.length <= 10_000) { "Resolution must not exceed 10,000 characters" }

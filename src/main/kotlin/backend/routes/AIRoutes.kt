@@ -9,6 +9,8 @@ import backend.models.ai.AIBridgeJobCompletionRequest
 import backend.models.ai.AIBridgeCollectorUpdateRequest
 import backend.models.ai.AIBridgeTestResponse
 import backend.models.UserRole
+import backend.models.TicketStatus
+import backend.security.principal
 import backend.security.requireAuthenticated
 import backend.security.requireRole
 import backend.security.RateLimiter
@@ -124,9 +126,18 @@ fun Route.aiRoutes(chatService: AIChatService, configService: AIConfigService, t
 
     post("/api/ai/tickets/{id}/assist") {
         if (!call.requireRole(UserRole.ADMIN)) return@post
-        if (!call.requireAiCapacity()) return@post
         val ticketId = call.parameters["id"]?.toIntOrNull()
             ?: return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid ticket id"))
+        val ticket = ticketAiAdvisor.tickets.get(ticketId)
+            ?: return@post call.respond(HttpStatusCode.NotFound, mapOf("error" to "Ticket not found"))
+        if (ticket.status in setOf(TicketStatus.RESOLVED, TicketStatus.CLOSED)) {
+            return@post call.respond(HttpStatusCode.Conflict, mapOf("error" to "Resolved or closed tickets cannot generate new assistance"))
+        }
+        val actor = call.principal()!!.user
+        if (actor.role != UserRole.SUPERADMIN && ticket.assignedToUserId != actor.id) {
+            return@post call.respond(HttpStatusCode.Forbidden, mapOf("error" to "Only the assigned administrator can generate assistance for this ticket"))
+        }
+        if (!call.requireAiCapacity()) return@post
         val assistance = withContext(Dispatchers.IO) { ticketAiAdvisor.assist(ticketId) }
             ?: return@post call.respond(HttpStatusCode.NotFound, mapOf("error" to "Ticket not found"))
         call.respond(assistance)
