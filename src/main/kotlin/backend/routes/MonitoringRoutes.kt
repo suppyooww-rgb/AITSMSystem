@@ -78,12 +78,16 @@ fun Route.monitoringRoutes(
             if (!service.canDownloadPackage(request.enrollmentCode, actorId)) {
                 return@post call.respond(HttpStatusCode.Forbidden, ApiErrorResponse(403, "Enrollment package is unavailable"))
             }
+            if (request.repairCollectorId != null && !service.canRepairCollector(request.repairCollectorId, actorId, call.userRole())) {
+                return@post call.respond(HttpStatusCode.Forbidden, ApiErrorResponse(403, "Collector repair target is unavailable"))
+            }
             val executable = Thread.currentThread().contextClassLoader.getResourceAsStream("collector/AITSMCollectorSetup.exe")
                 ?: return@post call.respond(HttpStatusCode.ServiceUnavailable, ApiErrorResponse(503, "Windows collector installer is not included in this release"))
             val origin = Env.get("APP_BASE_URL")?.trim()?.removeSuffix("/")
                 ?: return@post call.respond(HttpStatusCode.ServiceUnavailable, ApiErrorResponse(503, "Application base URL is not configured"))
             val encodedOrigin = Base64.getUrlEncoder().withoutPadding().encodeToString(origin.toByteArray(Charsets.UTF_8))
-            val filename = "AITSMCollectorSetup--$encodedOrigin--${request.enrollmentCode}.exe"
+            val repairTarget = request.repairCollectorId ?: "new"
+            val filename = "AITSMCollectorSetup--$encodedOrigin--${request.enrollmentCode}--$repairTarget.exe"
             call.response.headers.append(HttpHeaders.ContentDisposition, "attachment; filename=\"$filename\"")
             call.respondOutputStream(ContentType.Application.OctetStream) {
                 executable.use { it.copyTo(this) }

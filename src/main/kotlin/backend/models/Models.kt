@@ -232,12 +232,18 @@ data class HostTelemetryDto(
 )
 
 @Serializable data class CollectorEnrollmentRequest(val siteId: String, val name: String)
-@Serializable data class CollectorPackageRequest(val siteId: String = "self-device", val name: String = "Windows device", val scope: String = "SELF")
+@Serializable data class CollectorPackageRequest(
+    val siteId: String = "self-device",
+    val name: String = "Windows device",
+    val scope: String = "SELF",
+    val repairCollectorId: String? = null
+)
 @Serializable data class CollectorPackageResponse(
     val enrollmentCode: String, val expiresAt: String, val scope: String,
-    val environment: String = "production", val baseUrl: String = ""
+    val environment: String = "production", val baseUrl: String = "",
+    val repairCollectorId: String? = null
 )
-@Serializable data class CollectorInstallerDownloadRequest(val enrollmentCode: String)
+@Serializable data class CollectorInstallerDownloadRequest(val enrollmentCode: String, val repairCollectorId: String? = null)
 @Serializable data class CollectorRedeemRequest(val enrollmentCode: String)
 @Serializable data class CollectorRedeemResponse(
     val collectorId: String, val token: String, val scope: String, val privateCidrs: List<String>, val intervalSeconds: Int = 60

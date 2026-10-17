@@ -174,7 +174,7 @@ function collectorActionMenu(item, index) {
 async function createAndDownloadCollector(packageRequest, status) {
   const enrollment = await fetchJsonOrThrow('/api/monitoring/collector-packages', { method: 'POST', body: JSON.stringify(packageRequest) });
   const response = await fetch('/api/monitoring/collector-installer/windows', {
-    method: 'POST', headers: authHeaders(), body: JSON.stringify({ enrollmentCode: enrollment.enrollmentCode })
+    method: 'POST', headers: authHeaders(), body: JSON.stringify({ enrollmentCode: enrollment.enrollmentCode, repairCollectorId: enrollment.repairCollectorId || null })
   });
   if (!response.ok) { const data = await response.json().catch(() => ({})); throw new Error(data.error || 'Installer download failed'); }
   const url = URL.createObjectURL(await response.blob());
@@ -204,7 +204,7 @@ async function repairCollector(id) {
   const status = document.getElementById('collectorDownloadStatus');
   status.textContent = `Creating a repair installer for ${item.name}…`; status.className = 'small';
   try {
-    await createAndDownloadCollector({ name: item.name, siteId: item.siteId, scope: item.scope }, status);
+    await createAndDownloadCollector({ name: item.name, siteId: item.siteId, scope: item.scope, repairCollectorId: item.collectorId }, status);
   } catch (error) { status.textContent = error.message || 'Unable to create repair installer.'; status.className = 'small text-danger'; }
 }
 

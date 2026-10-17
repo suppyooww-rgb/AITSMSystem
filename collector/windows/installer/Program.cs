@@ -13,7 +13,7 @@ using System.Text.RegularExpressions;
 
 namespace AITSMCollector;
 
-internal sealed record AgentConfig(string BaseUrl, string Token, string Scope, string[] PrivateCidrs, int IntervalSeconds);
+internal sealed record AgentConfig(string BaseUrl, string Token, string Scope, string[] PrivateCidrs, int IntervalSeconds, string? CollectorId = null);
 internal sealed record RedeemResponse(string CollectorId, string Token, string Scope, string[] PrivateCidrs, int IntervalSeconds);
 internal sealed record BridgeHeartbeatResponse(bool Enabled, string ConfiguredModel, int PollSeconds);
 internal sealed record BridgeMessage(string Role, string Content);
@@ -45,7 +45,7 @@ internal static class Program
         try
         {
             RequireAdministrator();
-            var (baseUrl, code) = ReadBootstrapFromFilename(Environment.ProcessPath ?? "");
+            var (baseUrl, code, repairCollectorId) = ReadBootstrapFromFilename(Environment.ProcessPath ?? "");
             Directory.CreateDirectory(InstallDir);
             AgentConfig? existing = null;
             if (File.Exists(ConfigPath))
@@ -54,7 +54,12 @@ internal static class Program
                     ?? throw new InvalidOperationException("Existing collector configuration is invalid. Use the uninstall option before reinstalling.");
             }
 
-            if (existing != null && existing.BaseUrl.Equals(baseUrl, StringComparison.OrdinalIgnoreCase))
+            var repairingSameCollector = existing != null &&
+                existing.BaseUrl.Equals(baseUrl, StringComparison.OrdinalIgnoreCase) &&
+                repairCollectorId != null &&
+                existing.CollectorId != null &&
+                existing.CollectorId.Equals(repairCollectorId, StringComparison.OrdinalIgnoreCase);
+            if (repairingSameCollector)
             {
                 Console.WriteLine("Repairing the existing AITSM Collector installation...");
             }
@@ -62,7 +67,9 @@ internal static class Program
             {
                 Console.WriteLine(existing == null
                     ? "Enrolling this computer with AITSM..."
-                    : $"Switching this computer from {existing.BaseUrl} to {baseUrl}...");
+                    : existing.BaseUrl.Equals(baseUrl, StringComparison.OrdinalIgnoreCase)
+                        ? "Registering this computer for the selected AITSM account..."
+                        : $"Switching this computer from {existing.BaseUrl} to {baseUrl}...");
                 var config = await Redeem(baseUrl, code);
                 File.WriteAllBytes(ConfigPath, MachineProtection.Protect(JsonSerializer.SerializeToUtf8Bytes(config)));
             }
@@ -100,7 +107,7 @@ internal static class Program
             throw new InvalidOperationException($"Enrollment failed (HTTP {(int)response.StatusCode}). The download may be expired or already used.");
         var enrollment = JsonSerializer.Deserialize<RedeemResponse>(json, JsonOptions())
             ?? throw new InvalidOperationException("Enrollment response was invalid.");
-        return new AgentConfig(baseUrl, enrollment.Token, enrollment.Scope, enrollment.PrivateCidrs ?? [], Math.Max(30, enrollment.IntervalSeconds));
+        return new AgentConfig(baseUrl, enrollment.Token, enrollment.Scope, enrollment.PrivateCidrs ?? [], Math.Max(30, enrollment.IntervalSeconds), enrollment.CollectorId);
     }
 
     private static int Uninstall()
@@ -118,16 +125,21 @@ internal static class Program
         catch (Exception error) { Console.Error.WriteLine(error.Message); return 1; }
     }
 
-    private static (string BaseUrl, string Code) ReadBootstrapFromFilename(string executable)
+    private static (string BaseUrl, string Code, string? RepairCollectorId) ReadBootstrapFromFilename(string executable)
     {
         var name = Path.GetFileNameWithoutExtension(executable);
         var parts = name.Split("--", StringSplitOptions.None);
-        if (parts.Length != 3 || !parts[0].Equals("AITSMCollectorSetup", StringComparison.OrdinalIgnoreCase))
+        if (parts.Length is not (3 or 4) || !parts[0].Equals("AITSMCollectorSetup", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("This installer is missing its enrollment information. Download a fresh copy from AITSM.");
         var origin = Encoding.UTF8.GetString(Convert.FromBase64String(PadBase64(parts[1].Replace('-', '+').Replace('_', '/'))));
         if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps || uri.PathAndQuery != "/")
             throw new InvalidOperationException("The AITSM address embedded in this installer is invalid.");
-        return (origin.TrimEnd('/'), parts[2]);
+        var repairCollectorId = parts.Length == 4 && !parts[3].Equals("new", StringComparison.OrdinalIgnoreCase)
+            ? parts[3]
+            : null;
+        if (repairCollectorId != null && !Guid.TryParse(repairCollectorId, out _))
+            throw new InvalidOperationException("The collector repair identity embedded in this installer is invalid.");
+        return (origin.TrimEnd('/'), parts[2], repairCollectorId);
     }
 
     private static string PadBase64(string value) => value.PadRight(value.Length + ((4 - value.Length % 4) % 4), '=');

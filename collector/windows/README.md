@@ -35,7 +35,7 @@ Each download contains a high-entropy, single-use enrollment code in its generat
 - **Never connected**: enrollment exists but no report has arrived.
 - **Revoked**: the server will reject further reports for that credential.
 
-Running a newly downloaded installer from the same portal again repairs the local service installation, updates the collector binary, and reuses the already protected local credential. Running a newly downloaded installer from a different AITSM environment explicitly switches the local service to that environment: the new single-use enrollment is redeemed first, the DPAPI-protected credential is replaced, and the service is restarted. The previous server record remains available for administrators to revoke or retain as audit history.
+The **Repair** action produces an installer tied to that exact collector record. When it runs on the matching computer, it repairs the service and updates the binary while reusing the protected credential. A fresh installer always redeems its single-use enrollment—even when another collector for the same portal is already installed—so the computer can be moved to the account that downloaded it. An installer for another environment also replaces the protected credential and restarts the service. Previous server records remain available for revocation or audit history.
 
 The collector starts automatically after Windows boots (delayed automatic start), restarts after service crashes, and uses exponential retry up to 15 minutes during repeated network or server failures. It records a secret-free local health snapshot at `C:\ProgramData\AITSMCollector\collector-status.json`. Administrators and device owners can download a server-side diagnostic summary or create a repair installer from the portal.
 

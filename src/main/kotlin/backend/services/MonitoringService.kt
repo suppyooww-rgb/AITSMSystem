@@ -77,15 +77,28 @@ class MonitoringService(
         val name = request.name.trim()
         require(site.matches(Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,99}"))) { "Site id is invalid." }
         require(name.isNotBlank() && name.length <= 150) { "Collector name is required and must be 150 characters or fewer." }
+        val repairCollectorId = request.repairCollectorId?.trim()?.takeIf { it.isNotBlank() }
+        if (repairCollectorId != null) {
+            require(canRepairCollector(repairCollectorId, userId, role, scope)) { "The selected collector is unavailable for repair." }
+        }
         repository.createEnrollmentCode(userId, scope, site, name).copy(
             environment = Env.get("DEPLOYMENT_ENV")?.trim()?.lowercase() ?: "production",
-            baseUrl = Env.get("APP_BASE_URL")?.trim()?.removeSuffix("/").orEmpty()
+            baseUrl = Env.get("APP_BASE_URL")?.trim()?.removeSuffix("/").orEmpty(),
+            repairCollectorId = repairCollectorId
         )
     }
     fun redeemPackage(code: String): CollectorRedeemResponse? = repository.redeemEnrollmentCode(
         code.trim(), assetDetectionService.getConfiguredPrivateCidrs()
     )
     fun canDownloadPackage(code: String, userId: Int) = repository.enrollmentCodeBelongsTo(code.trim(), userId)
+    fun canRepairCollector(rawId: String, userId: Int, role: UserRole, expectedScope: String? = null): Boolean {
+        val id = runCatching { UUID.fromString(rawId) }.getOrNull()?.toString() ?: return false
+        val admin = role in setOf(UserRole.ADMIN, UserRole.IT_ADMIN, UserRole.SUPERADMIN)
+        val collector = (if (admin) collectors() else collectorsForUser(userId)).firstOrNull { it.collectorId == id }
+            ?: return false
+        return collector.state !in setOf("REVOKED", "ARCHIVED") &&
+            (expectedScope == null || collector.scope == expectedScope)
+    }
     fun revoke(rawId: String): Boolean = repository.revoke(UUID.fromString(rawId))
     fun archive(rawId: String): Boolean = repository.archive(UUID.fromString(rawId))
     fun revokeOwned(rawId: String, userId: Int): Boolean = repository.revokeOwned(UUID.fromString(rawId), userId)

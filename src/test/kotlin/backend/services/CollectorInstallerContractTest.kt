@@ -28,6 +28,8 @@ class CollectorInstallerContractTest {
         assertTrue(source.contains("previousError"))
         assertTrue(source.contains("Switching this computer from"))
         assertTrue(source.contains("await Redeem(baseUrl, code)"))
+        assertTrue(source.contains("existing.CollectorId.Equals(repairCollectorId"))
+        assertTrue(source.contains("Registering this computer for the selected AITSM account"))
         assertTrue(source.contains("config.Scope == \"LAN\""))
         assertFalse(source.contains("Uninstall that collector before switching environments"))
         assertFalse(source.contains("Console.WriteLine(config.Token)"))
@@ -41,7 +43,9 @@ class CollectorInstallerContractTest {
         assertTrue(service.contains("if (collector.scope != \"LAN\") return null"))
         assertTrue(service.contains("Self-device collectors may report exactly one device"))
         assertTrue(routes.contains("service.canDownloadPackage(request.enrollmentCode, actorId)"))
+        assertTrue(routes.contains("service.canRepairCollector(request.repairCollectorId, actorId, call.userRole())"))
         assertTrue(routes.contains("service.revokeOwned(id, actorId)"))
+        assertTrue(service.contains("repairCollectorId = repairCollectorId"))
     }
 
     @Test fun `enrollment migration stores hashes and ownership without raw secrets`() {
