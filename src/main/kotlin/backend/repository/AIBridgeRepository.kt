@@ -56,9 +56,14 @@ class AIBridgeRepository(private val clock: Clock = Clock.systemUTC()) {
         }
         MonitoringCollectorsTable.update({ MonitoringCollectorsTable.id eq identity.id }) {
             it[aiBridgeLastSeenAt] = timestamp
-            it[aiBridgeAvailable] = enabled && request.available
-            it[aiBridgeModel] = request.model?.trim()?.take(150)
-            it[aiBridgeLastError] = request.error?.replace(Regex("[\\r\\n]+"), " ")?.take(500)
+            // A model-less heartbeat is the collector asking which model to probe. Preserve
+            // the last verified state until the immediately following probe result arrives,
+            // otherwise the Settings page can briefly and incorrectly show the bridge offline.
+            if (!request.model.isNullOrBlank()) {
+                it[aiBridgeAvailable] = enabled && request.available
+                it[aiBridgeModel] = request.model.trim().take(150)
+                it[aiBridgeLastError] = request.error?.replace(Regex("[\\r\\n]+"), " ")?.take(500)
+            }
         }
         enabled
     }

@@ -99,6 +99,7 @@ class CollectorInstallerContractTest {
         assertTrue(routes.contains("/api/ai/bridge/collector/jobs/next"))
         assertTrue(repository.contains("identity.scope != \"LAN\""))
         assertTrue(repository.contains("aiBridgeEnabled"))
+        assertTrue(repository.contains("if (!request.model.isNullOrBlank())"))
         assertTrue(migration.contains("request_payload TEXT NOT NULL"))
         assertFalse(source.contains("0.0.0.0:11434"))
         assertFalse(source.contains("OLLAMA_HOST"))
