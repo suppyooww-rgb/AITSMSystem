@@ -30,6 +30,12 @@ import kotlinx.serialization.Serializable
 
 @Serializable data class AIBridgeCollectorUpdateRequest(val enabled: Boolean)
 
+@Serializable data class AIBridgeTestResponse(
+    val ok: Boolean,
+    val message: String? = null,
+    val error: String? = null
+)
+
 @Serializable data class AIBridgeStatusResponse(
     val available: Boolean,
     val enabledCollectors: Int,

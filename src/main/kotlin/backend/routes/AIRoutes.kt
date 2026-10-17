@@ -7,6 +7,7 @@ import backend.models.ai.AITicketDraftRequest
 import backend.models.ai.AIBridgeHeartbeatRequest
 import backend.models.ai.AIBridgeJobCompletionRequest
 import backend.models.ai.AIBridgeCollectorUpdateRequest
+import backend.models.ai.AIBridgeTestResponse
 import backend.models.UserRole
 import backend.security.requireAuthenticated
 import backend.security.requireRole
@@ -147,8 +148,8 @@ fun Route.aiRoutes(chatService: AIChatService, configService: AIConfigService, t
     post("/api/ai/bridge/test") {
         if (!call.requireRole(UserRole.ADMIN)) return@post
         val result = bridgeService.testConnection()
-        if (result.ok) call.respond(mapOf("ok" to true, "message" to "AITSM reached Ollama through the secure AI Bridge."))
-        else call.respond(HttpStatusCode.ServiceUnavailable, mapOf("ok" to false, "error" to (result.errorMessage ?: "Local AI test failed")))
+        if (result.ok) call.respond(AIBridgeTestResponse(true, message = "AITSM reached Ollama through the secure AI Bridge."))
+        else call.respond(HttpStatusCode.ServiceUnavailable, AIBridgeTestResponse(false, error = result.errorMessage ?: "Local AI test failed"))
     }
 
     post("/api/ai/config") {

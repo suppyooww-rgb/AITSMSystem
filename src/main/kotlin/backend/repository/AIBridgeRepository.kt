@@ -83,7 +83,7 @@ class AIBridgeRepository(private val clock: Clock = Clock.systemUTC()) {
             configuredModel = configuredModel,
             message = when {
                 healthy > 0 -> "Local AI bridge is online and the configured model is available."
-                enabled == 0 -> "Enable AI Bridge on an online company/LAN collector."
+                enabled == 0 -> "Open the Actions (⋯) menu beside an online company/LAN collector and choose Enable AI Bridge."
                 else -> "AI Bridge is enabled but Ollama or the configured model is not available."
             }
         )

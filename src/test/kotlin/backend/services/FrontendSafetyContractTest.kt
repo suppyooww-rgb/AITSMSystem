@@ -139,6 +139,10 @@ class FrontendSafetyContractTest {
         assertTrue(settingsScript.contains("ollama pull ${'$'}{model}"))
         assertTrue(settingsScript.contains("/api/ai/bridge/test"))
         assertTrue(settingsScript.contains("/api/ai/bridge/collectors/"))
+        val aiRoutes = Files.readString(Path.of("src/main/kotlin/backend/routes/AIRoutes.kt"))
+        assertTrue(aiRoutes.contains("AIBridgeTestResponse(true"))
+        assertTrue(aiRoutes.contains("AIBridgeTestResponse(false"))
+        assertFalse(aiRoutes.contains("mapOf(\"ok\" to true, \"message\""))
         assertFalse(settingsScript.contains("Gemini"))
         assertFalse(settingsScript.contains("fetch('http://127.0.0.1:11434"))
     }
