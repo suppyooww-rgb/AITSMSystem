@@ -65,6 +65,20 @@ class FrontendSafetyContractTest {
         assertFalse(invitationScript.contains("/api/auth/register"))
     }
 
+    @Test fun `user administration masks passwords and never returns verified invites to pending`() {
+        val frontend = Files.readString(Path.of("src/main/resources/static/frontend/user-management/js/user-management.js"))
+        val page = Files.readString(Path.of("src/main/resources/static/frontend/user-management/html/user-management.html"))
+        val routes = Files.readString(Path.of("src/main/kotlin/backend/routes/AuthRoutes.kt"))
+
+        assertTrue(frontend.contains("await requestReauthPassword()"))
+        assertFalse(frontend.contains("prompt(`Verify your password"))
+        assertFalse(frontend.contains("Mark email as pending"))
+        assertTrue(page.contains("id='temporaryPassword' type='password'"))
+        assertTrue(page.contains("id='temporaryPasswordConfirm' type='password'"))
+        assertTrue(routes.contains("AdminSensitiveVerifyResponse("))
+        assertTrue(routes.contains("Verified invitation accounts cannot be returned to pending status"))
+    }
+
     @Test fun `ticket workspaces load every paginated ticket`() {
         val common = Files.readString(Path.of("src/main/resources/static/frontend/modules/common/js/app.js"))
         val pages = listOf(

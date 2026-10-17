@@ -130,7 +130,13 @@ data class RegisterRequest(
 @Serializable data class AdminEligibilityRequest(val targetEmail: String)
 @Serializable data class AdminEligibilityResponse(val found: Boolean, val eligible: Boolean, val alreadyAdmin: Boolean, val targetUserId: Int? = null, val message: String)
 @Serializable data class AdminSensitiveVerifyRequest(val password: String)
-@Serializable data class AdminSensitiveVerifyResponse(val verified: Boolean, val verificationToken: String? = null, val expiresAt: String? = null, val message: String)
+@Serializable data class AdminSensitiveVerifyResponse(
+    val verified: Boolean,
+    val verificationToken: String? = null,
+    val reauthToken: String? = null,
+    val expiresAt: String? = null,
+    val message: String
+)
 @Serializable data class AdminGrantRequest(val targetEmail: String, val verificationToken: String)
 @Serializable data class AdminGrantResponse(val success: Boolean, val user: User? = null, val message: String)
 @Serializable data class UserActionResponse(val message: String, val user: User)
