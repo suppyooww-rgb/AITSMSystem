@@ -31,12 +31,15 @@ class FrontendSafetyContractTest {
     @Test fun `monitoring never labels cloud host metrics as lan telemetry`() {
         val monitoring = Files.readString(Path.of("src/main/kotlin/backend/services/MonitoringService.kt"))
         val frontend = Files.readString(Path.of("src/main/resources/static/frontend/monitoring/js/monitoring.js"))
+        val page = Files.readString(Path.of("src/main/resources/static/frontend/monitoring/html/monitoring.html"))
         assertFalse(monitoring.contains("ManagementFactory"))
         assertFalse(monitoring.contains("discoverArpPeers"))
         assertTrue(frontend.contains("Last data received"))
         assertFalse(frontend.contains("Host CPU"))
         assertTrue(frontend.contains("waiting for LAN collector"))
         assertTrue(frontend.contains("['PENDING', 'IN_PROGRESS'].includes(discoveryState)"))
+        assertTrue(page.contains("Scan LAN Now"))
+        assertFalse(page.contains("Refresh Discovery"))
     }
 
     @Test fun `asset registration accepts normal IPv4 addresses in the browser`() {

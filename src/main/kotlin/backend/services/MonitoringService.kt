@@ -125,7 +125,7 @@ class MonitoringService(
 
     fun requestDiscovery(): DiscoveryRefreshResponse {
         val (requestId, _) = repository.queueDiscovery()
-        return DiscoveryRefreshResponse(requestId.toString(), "PENDING", "Discovery was queued for the LAN collector.")
+        return DiscoveryRefreshResponse(requestId.toString(), "PENDING", "LAN scan was queued for the collector.")
     }
     fun nextCommand(rawToken: String): backend.models.DiscoveryCommand? {
         val collector = repository.authenticate(rawToken) ?: throw InvalidCollectorTokenException()
