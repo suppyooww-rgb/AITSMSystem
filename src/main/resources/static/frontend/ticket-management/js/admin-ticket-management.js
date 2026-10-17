@@ -113,18 +113,23 @@ function renderAdminTicketAiContext() {
   const savedMeta = document.getElementById('adminTicketSavedResolutionMeta');
   const saveButton = document.getElementById('saveTicketAiDraftBtn');
   const isClosed = normalizeStatus(ticket.status) === 'closed';
+  const ownedByMe = Number(ticket.assignedToUserId || 0) === Number(window.currentUser?.id || 0);
   saved?.classList.toggle('hidden', !ticket.reviewedResolution);
   if (savedText) savedText.textContent = ticket.reviewedResolution || '';
   if (savedMeta) savedMeta.textContent = ticket.reviewedResolution
     ? `Last saved ${formatDate(ticket.resolutionUpdatedAt)}${ticket.resolutionUpdatedBy ? ` by ${ticket.resolutionUpdatedBy}` : ''}.`
     : '';
   if (saveButton) {
-    saveButton.disabled = isClosed;
-    saveButton.title = isClosed ? 'Reopen the ticket before saving a new resolution.' : '';
+    saveButton.disabled = isClosed || !ownedByMe;
+    saveButton.title = isClosed
+      ? 'Reopen the ticket before saving a new resolution.'
+      : (!ownedByMe ? `Only ${ticket.assignedTo || 'the assigned administrator'} can save a resolution.` : '');
   }
   document.getElementById('adminTicketAiStatus').textContent = isClosed
     ? 'This ticket is closed. You can generate and copy assistance, but reopen it before saving a new resolution.'
-    : 'Generate reviewable assistance. Until the local AI Bridge is available, deterministic fallback guidance is used.';
+    : (!ownedByMe
+      ? `${ticket.assignedTo ? `Handled by ${ticket.assignedTo}. ` : 'This ticket is unassigned. '}You may review assistance, but only the owner can save changes.`
+      : 'Generate reviewable assistance. Until the local AI Bridge is available, deterministic fallback guidance is used.');
   loadAdminTicketHistory(ticket.id);
 }
 
@@ -299,6 +304,10 @@ function openTicketTransition(id, status) {
   const ticket = adminTicketState.tickets.find((item) => Number(item.id) === Number(id));
   const dialog = document.getElementById('ticketTransitionDialog');
   if (!ticket || !dialog) return;
+  if (Number(ticket.assignedToUserId) !== Number(window.currentUser?.id)) {
+    window.alert(ticket.assignedTo ? `This ticket is being handled by ${ticket.assignedTo}.` : 'Take this ticket before updating its status.');
+    return;
+  }
   document.getElementById('ticketTransitionId').value = String(id);
   document.getElementById('ticketTransitionStatus').value = status;
   document.getElementById('ticketTransitionNote').value = '';
@@ -310,6 +319,80 @@ function openTicketTransition(id, status) {
   updateTransitionRequirements();
   dialog.showModal();
   document.getElementById('ticketTransitionNote').focus();
+}
+
+async function claimTicket(id) {
+  closeAdminRowMenus();
+  if (!window.confirm(`Take ownership of ticket #${id} and set it In Progress?`)) return;
+  try {
+    await window.aitsmFetchJson(`/api/tickets/${id}/claim`, { method: 'POST' });
+    await loadAdminTicketManagement();
+  } catch (error) {
+    window.alert(error.message || 'Unable to take this ticket.');
+    await loadAdminTicketManagement();
+  }
+}
+
+function openTicketAssignment(id, mode) {
+  closeAdminRowMenus();
+  const ticket = adminTicketState.tickets.find((item) => Number(item.id) === Number(id));
+  const dialog = document.getElementById('ticketAssignmentDialog');
+  if (!ticket || !dialog) return;
+  const reassigning = mode === 'reassign';
+  document.getElementById('ticketAssignmentId').value = String(id);
+  document.getElementById('ticketAssignmentMode').value = mode;
+  document.getElementById('ticketAssignmentTitle').textContent = reassigning ? 'Reassign ticket' : 'Release ticket';
+  document.getElementById('ticketAssignmentMeta').textContent = `Ticket #${id}: ${ticket.title} • ${ticket.assignedTo || 'Unassigned'}`;
+  document.getElementById('ticketAssignmentNote').value = '';
+  document.getElementById('ticketAssignmentError').textContent = '';
+  document.getElementById('ticketAssigneeGroup').classList.toggle('hidden', !reassigning);
+  const select = document.getElementById('ticketAssigneeUserId');
+  if (reassigning) {
+    const eligible = [...adminTicketState.usersById.values()].filter((user) =>
+      ['ADMIN', 'IT_ADMIN', 'SUPERADMIN', 'SUPPORT_AGENT'].includes(String(user.role || '').toUpperCase())
+    );
+    select.innerHTML = eligible.map((user) => `<option value='${Number(user.id)}'>${escapeHtml(user.fullName)} (${escapeHtml(String(user.role).replaceAll('_', ' '))})</option>`).join('');
+    select.value = String(window.currentUser?.id || eligible[0]?.id || '');
+  }
+  dialog.showModal();
+  document.getElementById('ticketAssignmentNote').focus();
+}
+
+function closeTicketAssignment() {
+  document.getElementById('ticketAssignmentDialog')?.close();
+}
+
+async function submitTicketAssignment(event) {
+  event.preventDefault();
+  const id = Number(document.getElementById('ticketAssignmentId').value);
+  const mode = document.getElementById('ticketAssignmentMode').value;
+  const note = document.getElementById('ticketAssignmentNote').value.trim();
+  const errorHost = document.getElementById('ticketAssignmentError');
+  const submit = document.getElementById('submitTicketAssignmentBtn');
+  if (note.length < 5) {
+    errorHost.textContent = 'Enter a reason of at least 5 characters.';
+    return;
+  }
+  submit.disabled = true;
+  errorHost.textContent = '';
+  try {
+    if (mode === 'reassign') {
+      const assigneeUserId = Number(document.getElementById('ticketAssigneeUserId').value);
+      await window.aitsmFetchJson(`/api/tickets/${id}/assignment`, {
+        method: 'PUT', body: JSON.stringify({ assigneeUserId, note })
+      });
+    } else {
+      await window.aitsmFetchJson(`/api/tickets/${id}/release`, {
+        method: 'POST', body: JSON.stringify({ note })
+      });
+    }
+    closeTicketAssignment();
+    await loadAdminTicketManagement();
+  } catch (error) {
+    errorHost.textContent = error.message || 'Unable to change ticket ownership.';
+  } finally {
+    submit.disabled = false;
+  }
 }
 
 function closeTicketTransition() {
@@ -353,14 +436,26 @@ async function submitTicketTransition(event) {
 function actionMenu(ticket) {
   const current = normalizeStatus(ticket.status);
   const actions = [];
-  if (current !== 'open') actions.push(`<button type='button' onclick='openTicketTransition(${ticket.id}, "Open")'>Reopen ticket</button>`);
-  if (!['in progress', 'resolved', 'closed'].includes(current)) actions.push(`<button type='button' onclick='openTicketTransition(${ticket.id}, "In Progress")'>Set In Progress</button>`);
-  if (!['resolved', 'closed'].includes(current)) actions.push(`<button type='button' onclick='openTicketTransition(${ticket.id}, "Resolved")'>Resolve ticket</button>`);
-  if (current === 'resolved') actions.push(`<button type='button' onclick='openTicketTransition(${ticket.id}, "Closed")'>Close ticket</button>`);
+  const currentUserId = Number(window.currentUser?.id || 0);
+  const ownerId = Number(ticket.assignedToUserId || 0);
+  const ownedByMe = ownerId > 0 && ownerId === currentUserId;
+  const unassigned = ownerId === 0;
+  const superAdmin = String(window.currentUser?.role || '').toUpperCase() === 'SUPERADMIN';
+  if (unassigned && current === 'open') actions.push(`<button type='button' onclick='claimTicket(${ticket.id})'>Take ticket</button>`);
+  if (ownedByMe) {
+    if (current !== 'open') actions.push(`<button type='button' onclick='openTicketTransition(${ticket.id}, "Open")'>Reopen ticket</button>`);
+    if (!['resolved', 'closed'].includes(current)) actions.push(`<button type='button' onclick='openTicketTransition(${ticket.id}, "Resolved")'>Resolve ticket</button>`);
+    if (current === 'resolved') actions.push(`<button type='button' onclick='openTicketTransition(${ticket.id}, "Closed")'>Close ticket</button>`);
+    if (!['resolved', 'closed'].includes(current)) actions.push(`<button type='button' onclick='openTicketAssignment(${ticket.id}, "release")'>Release ticket</button>`);
+  }
+  if (superAdmin && ownerId > 0 && !ownedByMe && !['resolved', 'closed'].includes(current)) {
+    actions.push(`<button type='button' onclick='openTicketAssignment(${ticket.id}, "reassign")'>Reassign ticket</button>`);
+  }
+  const lockMessage = !unassigned && !ownedByMe ? `<span class='small'>Handled by ${escapeHtml(ticket.assignedTo || 'another administrator')}</span>` : '';
   return `<div class='row-action-wrap'>
     <button class='btn btn-ghost icon-btn' onclick='toggleAdminRowMenu(event, ${ticket.id})' title='Actions' aria-label='Actions'>...</button>
     <div id='adminTicketRowMenu-${ticket.id}' class='row-action-menu hidden'>
-      ${actions.join('') || '<span class="small">No status actions available.</span>'}
+      ${lockMessage}${actions.join('') || (!lockMessage ? '<span class="small">No status actions available.</span>' : '')}
     </div>
   </div>`;
 }
@@ -446,7 +541,7 @@ function renderAdminTicketRows() {
       <td>${escapeHtml(ticket.priority || '-')}</td>
       <td><span class='badge ${badge(ticket.status)}'>${statusLabel(ticket.status)}</span></td>
       <td><span class='badge ${ticket.slaRiskLevel === 'CRITICAL' || ticket.slaRiskLevel === 'HIGH' ? 'warning' : 'resolved'}' title='${escapeHtml((ticket.slaRiskReasons || []).join('; '))}'>${escapeHtml(ticket.slaRiskLevel || 'LOW')} ${Number(ticket.slaRiskScore || 0)}%</span></td>
-      <td>${formatDate(ticket.updatedAt || ticket.createdAt)}</td>
+      <td>${formatDate(ticket.updatedAt || ticket.createdAt)}${ticket.assignedTo ? `<div class='small'>Owner: ${escapeHtml(ticket.assignedTo)}</div>` : `<div class='small'>Unassigned</div>`}</td>
       <td>${actionMenu(ticket)}</td>
     </tr>
   `).join('');
@@ -461,6 +556,7 @@ async function loadAdminTicketManagement() {
   showTableSkeleton(rows, { rowCount: 8, columnCount: 9, hasActions: true });
 
   try {
+    await window.aitsmReady;
     const [ticketsData, usersRes] = await Promise.all([
       window.aitsmFetchAllPaginated('/api/tickets'),
       fetch('/api/users', { headers: authHeaders() })
@@ -519,5 +615,8 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('ticketTransitionStatus')?.addEventListener('change', updateTransitionRequirements);
   document.getElementById('closeTicketTransitionBtn')?.addEventListener('click', closeTicketTransition);
   document.getElementById('cancelTicketTransitionBtn')?.addEventListener('click', closeTicketTransition);
+  document.getElementById('ticketAssignmentForm')?.addEventListener('submit', submitTicketAssignment);
+  document.getElementById('closeTicketAssignmentBtn')?.addEventListener('click', closeTicketAssignment);
+  document.getElementById('cancelTicketAssignmentBtn')?.addEventListener('click', closeTicketAssignment);
   loadAdminTicketManagement();
 });

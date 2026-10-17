@@ -38,4 +38,22 @@ class TicketTransitionNotesContractTest {
         assertFalse(script.contains("updateTicketStatusAdmin"))
         assertTrue(userHtml.contains("id='selectedTicketActivity'"))
     }
+
+    @Test fun `ticket ownership is atomic and restricts administrator edits`() {
+        val service = Files.readString(Path.of("src/main/kotlin/backend/services/TicketService.kt"))
+        val repository = Files.readString(Path.of("src/main/kotlin/backend/repository/TicketRepository.kt"))
+        val routes = Files.readString(Path.of("src/main/kotlin/backend/routes/TicketRoutes.kt"))
+        val script = Files.readString(Path.of("src/main/resources/static/frontend/ticket-management/js/admin-ticket-management.js"))
+        val migration = Files.readString(Path.of("db/migrations/V016__atomic_ticket_ownership.sql"))
+
+        assertTrue(repository.contains("TicketsTable.assignedToUserId.isNull()"))
+        assertTrue(repository.contains("fun claim("))
+        assertTrue(service.contains("requireTicketOwner"))
+        assertTrue(service.contains("Ticket #\$id is being handled by \$actor"))
+        assertTrue(routes.contains("post(\"/{id}/claim\")"))
+        assertTrue(routes.contains("put(\"/{id}/assignment\")"))
+        assertTrue(script.contains("Take ticket"))
+        assertTrue(script.contains("Handled by"))
+        assertTrue(migration.contains("assigned_to_user_id INT REFERENCES users(id) ON DELETE SET NULL"))
+    }
 }

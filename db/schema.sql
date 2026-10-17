@@ -77,6 +77,7 @@ CREATE TABLE IF NOT EXISTS tickets (
   priority VARCHAR(20) NOT NULL,
   category VARCHAR(80) NOT NULL,
   status VARCHAR(30) NOT NULL,
+  assigned_to_user_id INT REFERENCES users(id) ON DELETE SET NULL,
   assigned_to VARCHAR(150),
   reviewed_resolution TEXT,
   resolution_updated_by VARCHAR(150),

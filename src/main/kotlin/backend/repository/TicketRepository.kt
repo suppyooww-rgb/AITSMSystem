@@ -91,11 +91,14 @@ class TicketRepository {
             .reversed()
     }
 
-    fun update(id: Int, req: TicketRequest): Ticket? = transaction {
+    fun update(id: Int, req: TicketRequest, expectedAssigneeUserId: Int? = null, enforceOwner: Boolean = false): Ticket? = transaction {
         val existing = TicketsTable.selectAll().where { TicketsTable.id eq id }.singleOrNull() ?: return@transaction null
         val priorityChanged = existing[TicketsTable.priority] != req.priority
         val (responseTarget, resolutionTarget) = policyTargets(req.priority)
-        TicketsTable.update({ TicketsTable.id eq id }) {
+        val updated = TicketsTable.update({
+            if (enforceOwner) (TicketsTable.id eq id) and (TicketsTable.assignedToUserId eq expectedAssigneeUserId)
+            else TicketsTable.id eq id
+        }) {
             it[title] = req.title
             it[description] = req.description
             it[priority] = req.priority
@@ -111,7 +114,92 @@ class TicketRepository {
                 it[slaResolutionWarningLevel] = 0
             }
         }
+        if (updated == 0) error("Ticket ownership changed before the update could be saved")
         get(id)
+    }
+
+    fun claim(id: Int, assigneeUserId: Int, assigneeName: String): Ticket? = transaction {
+        val now = LocalDateTime.now()
+        val changed = TicketsTable.update({
+            (TicketsTable.id eq id) and
+                TicketsTable.assignedToUserId.isNull() and
+                (TicketsTable.status eq TicketStatus.OPEN.name)
+        }) {
+            it[assignedToUserId] = assigneeUserId
+            it[assignedTo] = assigneeName
+            it[status] = TicketStatus.PENDING.name
+            it[updatedAt] = now
+            it[slaFirstResponseAt] = now
+        }
+        if (changed == 0) {
+            val current = TicketsTable.selectAll().where { TicketsTable.id eq id }.singleOrNull()
+                ?: return@transaction null
+            if (current[TicketsTable.assignedToUserId] == assigneeUserId) return@transaction toTicket(current)
+            error("This ticket was already taken by ${current[TicketsTable.assignedTo] ?: "another administrator"}")
+        }
+        TicketHistoryTable.insert {
+            it[ticketId] = id
+            it[status] = TicketStatus.PENDING.name
+            it[previousStatus] = TicketStatus.OPEN.name
+            it[workNote] = "Ticket claimed by $assigneeName"
+            it[userMessage] = "Your ticket is now being handled by $assigneeName."
+            it[resolutionCategory] = null
+            it[notifyRequester] = true
+            it[updatedBy] = assigneeName
+            it[timestamp] = now
+        }
+        TicketsTable.selectAll().where { TicketsTable.id eq id }.singleOrNull()?.let(::toTicket)
+    }
+
+    fun release(id: Int, assigneeUserId: Int, actorName: String, note: String): Ticket? = transaction {
+        val now = LocalDateTime.now()
+        val existing = TicketsTable.selectAll().where { TicketsTable.id eq id }.singleOrNull() ?: return@transaction null
+        val changed = TicketsTable.update({
+            (TicketsTable.id eq id) and (TicketsTable.assignedToUserId eq assigneeUserId)
+        }) {
+            it[assignedToUserId] = null
+            it[assignedTo] = null
+            it[status] = TicketStatus.OPEN.name
+            it[updatedAt] = now
+        }
+        if (changed == 0) error("Ticket ownership changed before it could be released")
+        TicketHistoryTable.insert {
+            it[ticketId] = id
+            it[status] = TicketStatus.OPEN.name
+            it[previousStatus] = existing[TicketsTable.status]
+            it[workNote] = note
+            it[userMessage] = null
+            it[resolutionCategory] = null
+            it[notifyRequester] = false
+            it[updatedBy] = actorName
+            it[timestamp] = now
+        }
+        TicketsTable.selectAll().where { TicketsTable.id eq id }.singleOrNull()?.let(::toTicket)
+    }
+
+    fun reassign(id: Int, assigneeUserId: Int, assigneeName: String, actorName: String, note: String): Ticket? = transaction {
+        val now = LocalDateTime.now()
+        val existing = TicketsTable.selectAll().where { TicketsTable.id eq id }.singleOrNull() ?: return@transaction null
+        val nextStatus = if (existing[TicketsTable.status] == TicketStatus.OPEN.name) TicketStatus.PENDING.name else existing[TicketsTable.status]
+        TicketsTable.update({ TicketsTable.id eq id }) {
+            it[assignedToUserId] = assigneeUserId
+            it[assignedTo] = assigneeName
+            it[status] = nextStatus
+            it[updatedAt] = now
+            if (existing[TicketsTable.slaFirstResponseAt] == null) it[slaFirstResponseAt] = now
+        }
+        TicketHistoryTable.insert {
+            it[ticketId] = id
+            it[status] = nextStatus
+            it[previousStatus] = existing[TicketsTable.status]
+            it[workNote] = note
+            it[userMessage] = null
+            it[resolutionCategory] = null
+            it[notifyRequester] = false
+            it[updatedBy] = actorName
+            it[timestamp] = now
+        }
+        TicketsTable.selectAll().where { TicketsTable.id eq id }.singleOrNull()?.let(::toTicket)
     }
 
     fun updateStatus(
@@ -122,14 +210,19 @@ class TicketRepository {
         userMessageValue: String?,
         resolutionCategoryValue: String?,
         notifyRequesterValue: Boolean,
-        recordFirstResponse: Boolean = false
+        recordFirstResponse: Boolean = false,
+        expectedAssigneeUserId: Int? = null,
+        enforceOwner: Boolean = false
     ): Ticket? = transaction {
         val now = LocalDateTime.now()
         val existing = TicketsTable.selectAll().where { TicketsTable.id eq id }.singleOrNull() ?: return@transaction null
         val oldStatus = runCatching { TicketStatus.valueOf(existing[TicketsTable.status]) }.getOrDefault(TicketStatus.OPEN)
         val nextStatus = runCatching { TicketStatus.valueOf(newStatus) }.getOrDefault(TicketStatus.OPEN)
         val reopening = oldStatus in setOf(TicketStatus.RESOLVED, TicketStatus.CLOSED) && nextStatus in setOf(TicketStatus.OPEN, TicketStatus.PENDING)
-        TicketsTable.update({ TicketsTable.id eq id }) {
+        val updated = TicketsTable.update({
+            if (enforceOwner) (TicketsTable.id eq id) and (TicketsTable.assignedToUserId eq expectedAssigneeUserId)
+            else TicketsTable.id eq id
+        }) {
             it[status] = newStatus
             it[updatedAt] = now
             if (recordFirstResponse && existing[TicketsTable.slaFirstResponseAt] == null) {
@@ -156,6 +249,7 @@ class TicketRepository {
                 it[resolutionUpdatedAt] = now
             }
         }
+        if (updated == 0) error("Ticket ownership changed before the status update could be saved")
         TicketHistoryTable.insert {
             it[ticketId] = id
             it[status] = newStatus
@@ -221,14 +315,17 @@ class TicketRepository {
         completed.size to completed.count { it[TicketsTable.slaResolutionBreachedAt] != null }
     }
 
-    fun updateResolution(id: Int, resolution: String, updatedBy: String): Ticket? = transaction {
+    fun updateResolution(id: Int, resolution: String, updatedBy: String, expectedAssigneeUserId: Int): Ticket? = transaction {
         val now = LocalDateTime.now()
-        TicketsTable.update({ TicketsTable.id eq id }) {
+        val updated = TicketsTable.update({
+            (TicketsTable.id eq id) and (TicketsTable.assignedToUserId eq expectedAssigneeUserId)
+        }) {
             it[reviewedResolution] = resolution
             it[resolutionUpdatedBy] = updatedBy
             it[resolutionUpdatedAt] = now
             it[updatedAt] = now
         }
+        if (updated == 0) error("Ticket ownership changed before the resolution could be saved")
         get(id)
     }
 
@@ -258,6 +355,7 @@ class TicketRepository {
             priority = priorityValue,
             category = row[TicketsTable.category],
             status = ticketStatus,
+            assignedToUserId = row[TicketsTable.assignedToUserId],
             assignedTo = row[TicketsTable.assignedTo],
             reviewedResolution = row[TicketsTable.reviewedResolution],
             resolutionUpdatedBy = row[TicketsTable.resolutionUpdatedBy],

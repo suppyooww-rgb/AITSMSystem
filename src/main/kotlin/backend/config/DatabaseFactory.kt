@@ -271,6 +271,7 @@ object TicketsTable : Table("tickets") {
     val priority = varchar("priority", 20)
     val category = varchar("category", 80)
     val status = varchar("status", 30).index()
+    val assignedToUserId = integer("assigned_to_user_id").references(UsersTable.id, onDelete = ReferenceOption.SET_NULL).nullable().index()
     val assignedTo = varchar("assigned_to", 150).nullable()
     val reviewedResolution = text("reviewed_resolution").nullable()
     val resolutionUpdatedBy = varchar("resolution_updated_by", 150).nullable()

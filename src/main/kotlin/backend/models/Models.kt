@@ -152,6 +152,7 @@ data class Ticket(
     val priority: String,
     val category: String,
     val status: TicketStatus,
+    val assignedToUserId: Int? = null,
     val assignedTo: String? = null,
     val reviewedResolution: String? = null,
     val resolutionUpdatedBy: String? = null,
@@ -185,6 +186,7 @@ data class Ticket(
     val notifyRequester: Boolean = true
 )
 @Serializable data class TicketResolutionUpdate(val resolution: String)
+@Serializable data class TicketAssignmentUpdate(val assigneeUserId: Int? = null, val note: String? = null)
 @Serializable data class TicketHistoryEvent(
     val status: String,
     val previousStatus: String? = null,

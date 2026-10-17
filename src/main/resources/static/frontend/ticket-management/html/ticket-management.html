@@ -111,6 +111,34 @@
         </div>
       </form>
     </dialog>
+    <dialog id='ticketAssignmentDialog' class='ticket-transition-dialog' aria-labelledby='ticketAssignmentTitle'>
+      <form id='ticketAssignmentForm' class='ticket-transition-form'>
+        <div class='card-head'>
+          <div>
+            <p class='page-kicker'>Ownership control</p>
+            <h3 id='ticketAssignmentTitle' class='section-title'>Manage ticket ownership</h3>
+            <p id='ticketAssignmentMeta' class='section-subtitle'></p>
+          </div>
+          <button id='closeTicketAssignmentBtn' class='btn btn-ghost icon-btn' type='button' aria-label='Close dialog'>×</button>
+        </div>
+        <input id='ticketAssignmentId' type='hidden'>
+        <input id='ticketAssignmentMode' type='hidden'>
+        <div id='ticketAssigneeGroup' class='form-group hidden'>
+          <label for='ticketAssigneeUserId'>Assign to *</label>
+          <select id='ticketAssigneeUserId'></select>
+        </div>
+        <div class='form-group'>
+          <label for='ticketAssignmentNote'>Reason *</label>
+          <textarea id='ticketAssignmentNote' maxlength='4000' required placeholder='Explain why this ticket is being released or reassigned.'></textarea>
+          <p class='small'>This reason is kept in the permanent ticket activity record.</p>
+        </div>
+        <p id='ticketAssignmentError' class='small text-danger' aria-live='polite'></p>
+        <div class='inline-actions ticket-transition-actions'>
+          <button id='cancelTicketAssignmentBtn' class='btn btn-ghost' type='button'>Cancel</button>
+          <button id='submitTicketAssignmentBtn' class='btn btn-primary' type='submit'>Save ownership change</button>
+        </div>
+      </form>
+    </dialog>
     <section id='adminTicketAiPanel' class='card ai-ticket-assistance hidden' aria-live='polite'>
       <div class='card-head'>
         <div>
