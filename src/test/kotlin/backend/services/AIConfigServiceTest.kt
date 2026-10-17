@@ -42,4 +42,13 @@ class AIConfigServiceTest {
             service.update(AIConfigUpdateRequest("http://localhost:11434; stop"))
         }
     }
+
+    @Test
+    fun `bridge availability is reflected dynamically`() {
+        var online = false
+        val service = AIConfigService(config(), InMemorySettingsStore()) { online }
+        assertFalse(service.snapshot().localBridgeAvailable)
+        online = true
+        kotlin.test.assertTrue(service.snapshot().localBridgeAvailable)
+    }
 }

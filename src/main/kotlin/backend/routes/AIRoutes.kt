@@ -4,6 +4,9 @@ import backend.models.ai.AIChatRequest
 import backend.models.ai.TicketAiAnalysisRequest
 import backend.models.ai.AIConfigUpdateRequest
 import backend.models.ai.AITicketDraftRequest
+import backend.models.ai.AIBridgeHeartbeatRequest
+import backend.models.ai.AIBridgeJobCompletionRequest
+import backend.models.ai.AIBridgeCollectorUpdateRequest
 import backend.models.UserRole
 import backend.security.requireAuthenticated
 import backend.security.requireRole
@@ -13,9 +16,11 @@ import backend.security.requireReauthentication
 import backend.services.ai.AIChatService
 import backend.services.ai.AIConfigService
 import backend.services.ai.TicketAiAdvisor
+import backend.services.ai.OllamaBridgeService
 import backend.services.ReauthScope
 import backend.services.ReauthenticationService
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.HttpHeaders
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
 import io.ktor.server.request.receive
@@ -23,11 +28,36 @@ import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
+import io.ktor.server.routing.put
 import java.util.UUID
 
 private val aiRateLimiter = RateLimiter(limit = 20, windowMillis = 60_000L)
 
-fun Route.aiRoutes(chatService: AIChatService, configService: AIConfigService, ticketAiAdvisor: TicketAiAdvisor, reauthentication: ReauthenticationService) {
+fun Route.aiRoutes(chatService: AIChatService, configService: AIConfigService, ticketAiAdvisor: TicketAiAdvisor, reauthentication: ReauthenticationService, bridgeService: OllamaBridgeService) {
+    post("/api/ai/bridge/collector/heartbeat") {
+        val token = call.collectorBearerToken() ?: return@post call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "Collector token is required"))
+        val response = bridgeService.heartbeat(token, call.receive<AIBridgeHeartbeatRequest>())
+            ?: return@post call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "Collector token is invalid or revoked"))
+        call.respond(response)
+    }
+
+    get("/api/ai/bridge/collector/jobs/next") {
+        val token = call.collectorBearerToken() ?: return@get call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "Collector token is required"))
+        if (bridgeService.authenticate(token) == null) return@get call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "Collector token is invalid or revoked"))
+        val job = bridgeService.nextJob(token)
+        if (job == null) call.respond(HttpStatusCode.NoContent) else call.respond(job)
+    }
+
+    post("/api/ai/bridge/collector/jobs/{id}/complete") {
+        val token = call.collectorBearerToken() ?: return@post call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "Collector token is required"))
+        val jobId = call.parameters["id"]?.let { runCatching { UUID.fromString(it) }.getOrNull() }
+            ?: return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid AI job id"))
+        when (bridgeService.complete(token, jobId, call.receive<AIBridgeJobCompletionRequest>())) {
+            null -> call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "Collector token is invalid or revoked"))
+            false -> call.respond(HttpStatusCode.Conflict, mapOf("error" to "AI job is unavailable or already completed"))
+            true -> call.respond(mapOf("accepted" to true))
+        }
+    }
     post("/api/ai/chat") {
         if (!call.requireAuthenticated()) return@post
         if (!call.requireAiCapacity()) return@post
@@ -97,6 +127,30 @@ fun Route.aiRoutes(chatService: AIChatService, configService: AIConfigService, t
         call.respond(configService.snapshot())
     }
 
+    get("/api/ai/bridge/status") {
+        if (!call.requireRole(UserRole.ADMIN)) return@get
+        call.respond(bridgeService.status())
+    }
+
+    put("/api/ai/bridge/collectors/{id}") {
+        if (!call.requireRole(UserRole.ADMIN)) return@put
+        if (!call.requireReauthentication(reauthentication, ReauthScope.SECURITY_CONFIG)) return@put
+        val collectorId = call.parameters["id"]?.let { runCatching { UUID.fromString(it) }.getOrNull() }
+            ?: return@put call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid collector id"))
+        val request = call.receive<AIBridgeCollectorUpdateRequest>()
+        if (!bridgeService.setEnabled(collectorId, request.enabled)) {
+            return@put call.respond(HttpStatusCode.Conflict, mapOf("error" to "Only an active company/LAN collector can run the AI Bridge"))
+        }
+        call.respond(bridgeService.status())
+    }
+
+    post("/api/ai/bridge/test") {
+        if (!call.requireRole(UserRole.ADMIN)) return@post
+        val result = bridgeService.testConnection()
+        if (result.ok) call.respond(mapOf("ok" to true, "message" to "AITSM reached Ollama through the secure AI Bridge."))
+        else call.respond(HttpStatusCode.ServiceUnavailable, mapOf("ok" to false, "error" to (result.errorMessage ?: "Local AI test failed")))
+    }
+
     post("/api/ai/config") {
         if (!call.requireRole(UserRole.ADMIN)) return@post
         if (!call.requireReauthentication(reauthentication, ReauthScope.SECURITY_CONFIG)) return@post
@@ -105,6 +159,9 @@ fun Route.aiRoutes(chatService: AIChatService, configService: AIConfigService, t
     }
 
 }
+
+private fun ApplicationCall.collectorBearerToken(): String? =
+    request.headers[HttpHeaders.Authorization]?.removePrefix("Bearer ")?.trim()?.takeIf { it.isNotBlank() }
 
 private fun ApplicationCall.resolveSessionId(): String {
     val raw = request.headers["X-AI-Session-Id"].orEmpty().trim()

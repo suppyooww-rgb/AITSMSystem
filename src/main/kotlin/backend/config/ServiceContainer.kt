@@ -10,6 +10,7 @@ import backend.repository.UserRepository
 import backend.repository.InvitationRepository
 import backend.repository.PasswordResetRepository
 import backend.repository.MonitoringRepository
+import backend.repository.AIBridgeRepository
 import backend.queries.SystemSettingsQueries
 import backend.queries.InventoryQueries
 import backend.services.AIService
@@ -31,7 +32,8 @@ import backend.services.ReauthenticationService
 import backend.services.TicketService
 import backend.services.ai.AIChatService
 import backend.services.ai.AIConfigService
-import backend.services.ai.PendingLocalAIProvider
+import backend.services.ai.OllamaBridgeProvider
+import backend.services.ai.OllamaBridgeService
 import backend.services.ai.TicketAiAdvisor
 import io.ktor.server.application.Application
 
@@ -47,6 +49,7 @@ class ServiceContainer(application: Application) {
     val assetDetectionService = AssetDetectionService(systemSettingsQueries)
     val deviceRepo = DeviceRepository(assetDetectionService)
     val monitoringRepository = MonitoringRepository()
+    val aiBridgeRepository = AIBridgeRepository()
     val knowledgeRepo = KnowledgeRepository()
     val aiConversationRepository = AIConversationRepository()
 
@@ -63,8 +66,11 @@ class ServiceContainer(application: Application) {
     val inventoryService = InventoryService(inventoryQueries, assetDetectionService)
     val monitoringService = MonitoringService(monitoringRepository, assetDetectionService, inventoryService)
     val aiService = AIService()
-    val aiConfigService = AIConfigService(application.environment.config, systemSettingsQueries)
-    private val aiProvider = PendingLocalAIProvider()
+    val aiConfigService = AIConfigService(application.environment.config, systemSettingsQueries) { model ->
+        aiBridgeRepository.status(model).available
+    }
+    private val aiProvider = OllamaBridgeProvider(aiBridgeRepository)
+    val ollamaBridgeService = OllamaBridgeService(aiBridgeRepository, monitoringRepository, aiConfigService)
     val aiChatService = AIChatService(aiProvider, aiConfigService, aiConversationRepository)
     val ticketAiAdvisor = TicketAiAdvisor(ticketService, knowledgeRepo, aiProvider, aiConfigService)
     val slaService = SLAService(auditRepo)

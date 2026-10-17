@@ -190,6 +190,7 @@ psql -h 127.0.0.1 -p 5433 -U $DB_MIGRATOR_USER -d $DB_NAME -v ON_ERROR_STOP=1 -f
 psql -h 127.0.0.1 -p 5433 -U $DB_MIGRATOR_USER -d $DB_NAME -v ON_ERROR_STOP=1 -f "db/migrations/V011__canonical_devices_and_address_history.sql"
 psql -h 127.0.0.1 -p 5433 -U $DB_MIGRATOR_USER -d $DB_NAME -v ON_ERROR_STOP=1 -f "db/migrations/V012__merge_stale_adapter_identity_into_uuid_device.sql"
 psql -h 127.0.0.1 -p 5433 -U $DB_MIGRATOR_USER -d $DB_NAME -v ON_ERROR_STOP=1 -f "db/migrations/V013__archive_revoked_collectors.sql"
+psql -h 127.0.0.1 -p 5433 -U $DB_MIGRATOR_USER -d $DB_NAME -v ON_ERROR_STOP=1 -f "db/migrations/V014__secure_ollama_ai_bridge.sql"
 Remove-Item Env:PGPASSWORD
 ```
 
@@ -387,12 +388,12 @@ Test with separate administrator and end-user accounts:
 6. Knowledge creation and end-user reading.
 7. User approval, role management, and deactivation.
 8. Assets, monitoring, inventory, SLA, and Settings.
-9. Deterministic AI fallback behavior, Ollama readiness settings, and rate limiting. Do not claim local AI connectivity before the secure bridge is installed.
+9. Deterministic AI fallback behavior, Ollama model settings, AI Bridge enable/disable, bridge heartbeat, test job, timeout fallback, and rate limiting.
 10. Profile-photo upload, approval, display, and persistence after a new revision.
 11. Colleague requests and messaging in two browser sessions.
 12. From each role, create and download the Windows collector package. Confirm end users receive `SELF` scope, administrators can receive `LAN` scope, the enrollment redeems only once, the Windows service starts automatically, an HTTPS report is accepted, health changes to Online, and revocation causes later reports to receive HTTP 401.
 
-Apply all ordered migrations through `V013__archive_revoked_collectors.sql` before deploying this release. Production disables runtime schema mutation, so database migrations must finish before the application revision is changed. Collector installation, scope, credential storage, firewall, verification, and uninstall guidance is in [`../collector/windows/README.md`](../collector/windows/README.md).
+Apply all ordered migrations through `V014__secure_ollama_ai_bridge.sql` before deploying this release. Production disables runtime schema mutation, so database migrations must finish before the application revision is changed. Collector installation, scope, credential storage, firewall, AI Bridge verification, and uninstall guidance is in [`../collector/windows/README.md`](../collector/windows/README.md).
 
 Unauthenticated security checks:
 

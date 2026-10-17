@@ -86,4 +86,21 @@ class CollectorInstallerContractTest {
         assertTrue(routes.contains("/collectors/{id}/archive"))
         assertFalse(repository.contains("MonitoringCollectorsTable.deleteWhere"))
     }
+
+    @Test fun `local AI bridge is outbound authenticated LAN only and keeps ollama private`() {
+        val source = Files.readString(Path.of("collector/windows/installer/Program.cs"))
+        val routes = Files.readString(Path.of("src/main/kotlin/backend/routes/AIRoutes.kt"))
+        val repository = Files.readString(Path.of("src/main/kotlin/backend/repository/AIBridgeRepository.kt"))
+        val migration = Files.readString(Path.of("db/migrations/V014__secure_ollama_ai_bridge.sql"))
+
+        assertTrue(source.contains("http://127.0.0.1:11434"))
+        assertTrue(source.contains("AuthenticationHeaderValue(\"Bearer\", config.Token)"))
+        assertTrue(source.contains("AiBridgeLoop.Run"))
+        assertTrue(routes.contains("/api/ai/bridge/collector/jobs/next"))
+        assertTrue(repository.contains("identity.scope != \"LAN\""))
+        assertTrue(repository.contains("aiBridgeEnabled"))
+        assertTrue(migration.contains("request_payload TEXT NOT NULL"))
+        assertFalse(source.contains("0.0.0.0:11434"))
+        assertFalse(source.contains("OLLAMA_HOST"))
+    }
 }

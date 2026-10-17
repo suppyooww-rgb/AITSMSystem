@@ -180,6 +180,26 @@ object MonitoringCollectorsTable : Table("monitoring_collectors") {
     val serviceStartedAt = datetime("service_started_at").nullable()
     val lastError = varchar("last_error", 500).nullable()
     val consecutiveFailures = integer("consecutive_failures").default(0)
+    val aiBridgeEnabled = bool("ai_bridge_enabled").default(false).index()
+    val aiBridgeAvailable = bool("ai_bridge_available").default(false)
+    val aiBridgeLastSeenAt = datetime("ai_bridge_last_seen_at").nullable().index()
+    val aiBridgeModel = varchar("ai_bridge_model", 150).nullable()
+    val aiBridgeLastError = varchar("ai_bridge_last_error", 500).nullable()
+    override val primaryKey = PrimaryKey(id)
+}
+
+object AiBridgeJobsTable : Table("ai_bridge_jobs") {
+    val id = uuid("id")
+    val collectorId = uuid("collector_id").references(MonitoringCollectorsTable.id, onDelete = ReferenceOption.SET_NULL).nullable().index()
+    val status = varchar("status", 20).index()
+    val model = varchar("model", 150)
+    val requestPayload = text("request_payload")
+    val responsePayload = text("response_payload").nullable()
+    val errorMessage = varchar("error_message", 500).nullable()
+    val createdAt = datetime("created_at").index()
+    val claimedAt = datetime("claimed_at").nullable()
+    val completedAt = datetime("completed_at").nullable()
+    val expiresAt = datetime("expires_at").index()
     override val primaryKey = PrimaryKey(id)
 }
 
@@ -464,6 +484,7 @@ object DatabaseFactory {
                 EulaAcceptanceTable,
                 DevicesTable,
                 MonitoringCollectorsTable,
+                AiBridgeJobsTable,
                 CollectorEnrollmentCodesTable,
                 MonitoringDevicesTable,
                 MonitoringDeviceAddressesTable,

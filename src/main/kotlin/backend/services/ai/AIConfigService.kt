@@ -15,7 +15,8 @@ private data class AIConfigState(
 
 class AIConfigService(
     config: ApplicationConfig,
-    private val settingsStore: SystemSettingsStore? = null
+    private val settingsStore: SystemSettingsStore? = null,
+    private val bridgeAvailable: (String) -> Boolean = { false }
 ) {
     private val defaultOllamaModel = "qwen3:8b"
     private val state = AtomicReference(
@@ -49,7 +50,7 @@ class AIConfigService(
         model = ollamaModel,
         timeoutMillis = timeoutMillis,
         ollamaModel = ollamaModel,
-        localBridgeAvailable = false
+        localBridgeAvailable = bridgeAvailable(ollamaModel)
     )
 
     private fun isValidOllamaModel(value: String): Boolean =

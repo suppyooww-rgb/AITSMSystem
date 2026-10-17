@@ -239,7 +239,7 @@ fun Application.module() {
         inventoryRoutes(container.inventoryService, container.reauthenticationService)
         slaRoutes(container.slaService, container.ticketService, container.reauthenticationService)
         settingsRoutes(container.assetDetectionService, container.reauthenticationService)
-        aiRoutes(container.aiChatService, container.aiConfigService, container.ticketAiAdvisor, container.reauthenticationService)
+        aiRoutes(container.aiChatService, container.aiConfigService, container.ticketAiAdvisor, container.reauthenticationService, container.ollamaBridgeService)
         auditRoutes(container.auditRepo)
     }
 }

@@ -1,6 +1,6 @@
 # AITSM Windows collector
 
-The production portal provides a one-click, self-contained Windows x64 installer. It enrolls once over HTTPS, installs `AITSMCollector` as an automatic Windows service, stores its collector credential with Windows DPAPI (`LocalMachine`), restricts the installation folder to SYSTEM and local Administrators, and begins reporting every 60 seconds. No inbound firewall rule, copied token, PowerShell command, .NET installation, or scheduled task is required.
+The portal provides a one-click, self-contained Windows x64 installer. It enrolls once over HTTPS, installs `AITSMCollector` as an automatic Windows service, stores its collector credential with Windows DPAPI (`LocalMachine`), restricts the installation folder to SYSTEM and local Administrators, and begins reporting every 60 seconds. Version 1.3.0 also contains the optional Ollama AI Bridge. No inbound firewall rule, copied token, PowerShell command, .NET installation, or scheduled task is required.
 
 ## Download and install
 
@@ -20,6 +20,10 @@ An administrator may instead choose **This computer only**. Only a Company/LAN c
 3. Confirm the device appears as **Online**.
 
 End-user installers are always forced to `SELF` scope by the server, even if a request is modified. A self-device collector can report exactly one private-address host with its own authenticated hardware inventory and resource telemetry. It cannot poll LAN discovery commands or submit peer devices.
+
+### Optional local AI bridge
+
+Only an active `LAN` collector can be enabled as an AI Bridge. Install Ollama on that Windows computer, pull the exact model configured in Settings, keep Ollama on `127.0.0.1:11434`, then choose **Enable AI Bridge** from the collector action menu. The service sends an authenticated heartbeat every 30 seconds and polls the portal for short-lived jobs over outbound HTTPS. It calls Ollama only on localhost and returns the result over the same authenticated channel. `SELF` collectors cannot claim or complete AI jobs. Revoking the collector immediately invalidates both telemetry and bridge access.
 
 Each download contains a high-entropy, single-use enrollment code in its generated filename. The server stores only its SHA-256 hash. Redemption returns the long-lived collector token once to the installer; the token is then DPAPI-encrypted on that Windows machine. Never share an unredeemed installer. Generate a new one if it expires or is renamed.
 
@@ -47,7 +51,8 @@ Then revoke the matching portal entry. The encrypted credential and local status
 
 ## Network and troubleshooting
 
-- Allow outbound TCP 443 to the AITSM production hostname. No inbound port or router change is required.
+- Allow outbound TCP 443 to the AITSM hostname. No inbound port or router change is required.
+- For AI, allow the Windows service to reach local `127.0.0.1:11434`; do not publish that port to the LAN or internet.
 - Company/LAN discovery is restricted to the private CIDRs configured in **Settings → Asset Detection Configuration**.
 - HTTP 401 in the local log means the credential was revoked or rejected. Revoke/uninstall it and download a replacement.
 - A Windows clock that is badly out of sync no longer blocks enrollment data; the server safely substitutes its authoritative receipt time while preserving the reported device data.
@@ -64,4 +69,4 @@ dotnet publish collector/windows/installer/AITSMCollectorSetup.csproj -c Release
 Copy-Item collector/windows/installer/publish/AITSMCollectorSetup.exe src/main/resources/collector/AITSMCollectorSetup.exe -Force
 ```
 
-The packaged EXE is served only after an authenticated, CSRF-protected request whose enrollment code belongs to the requesting account. Production deployment must apply `V008__collector_self_service_enrollment.sql` before starting the new application revision.
+The packaged EXE is served only after an authenticated, CSRF-protected request whose enrollment code belongs to the requesting account. Deployment must apply migrations through `V014__secure_ollama_ai_bridge.sql` before starting this application revision.

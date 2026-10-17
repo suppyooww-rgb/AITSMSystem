@@ -190,7 +190,10 @@ class MonitoringRepository(private val clock: Clock = Clock.systemUTC()) {
                 iso(row[MonitoringCollectorsTable.archivedAt]),
                 row[MonitoringCollectorsTable.scope], row[MonitoringCollectorsTable.ownerUserId], statusReason,
                 row[MonitoringCollectorsTable.agentVersion], iso(row[MonitoringCollectorsTable.serviceStartedAt]),
-                row[MonitoringCollectorsTable.lastError], row[MonitoringCollectorsTable.consecutiveFailures])
+                row[MonitoringCollectorsTable.lastError], row[MonitoringCollectorsTable.consecutiveFailures],
+                row[MonitoringCollectorsTable.aiBridgeEnabled], row[MonitoringCollectorsTable.aiBridgeAvailable],
+                iso(row[MonitoringCollectorsTable.aiBridgeLastSeenAt]), row[MonitoringCollectorsTable.aiBridgeModel],
+                row[MonitoringCollectorsTable.aiBridgeLastError])
         }
     }
 

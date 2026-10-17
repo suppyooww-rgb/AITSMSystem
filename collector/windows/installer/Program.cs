@@ -15,6 +15,9 @@ namespace AITSMCollector;
 
 internal sealed record AgentConfig(string BaseUrl, string Token, string Scope, string[] PrivateCidrs, int IntervalSeconds);
 internal sealed record RedeemResponse(string CollectorId, string Token, string Scope, string[] PrivateCidrs, int IntervalSeconds);
+internal sealed record BridgeHeartbeatResponse(bool Enabled, string ConfiguredModel, int PollSeconds);
+internal sealed record BridgeMessage(string Role, string Content);
+internal sealed record BridgeJob(string JobId, string Model, BridgeMessage[] Messages, long TimeoutMillis);
 
 internal static class Program
 {
@@ -166,6 +169,8 @@ internal static class Program
         catch (System.ComponentModel.Win32Exception) { }
     }
     internal static JsonSerializerOptions JsonOptions() => new() { PropertyNameCaseInsensitive = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+    internal static AgentConfig LoadConfig() => JsonSerializer.Deserialize<AgentConfig>(MachineProtection.Unprotect(File.ReadAllBytes(ConfigPath)), JsonOptions())
+        ?? throw new InvalidOperationException("Collector configuration is invalid.");
     internal static void Log(string message)
     {
         try
@@ -203,6 +208,7 @@ internal sealed class CollectorWindowsService : ServiceBase
         cancellation = new CancellationTokenSource();
         Program.Log($"Collector service {Program.AgentVersion} started.");
         _ = Task.Run(() => CollectorLoop.Run(cancellation.Token));
+        _ = Task.Run(() => AiBridgeLoop.Run(cancellation.Token));
     }
     protected override void OnStop() { cancellation?.Cancel(); Program.Log("Collector service stopped."); }
 }
@@ -221,8 +227,7 @@ internal static class CollectorLoop
             string target = "unknown";
             try
             {
-                var config = JsonSerializer.Deserialize<AgentConfig>(MachineProtection.Unprotect(File.ReadAllBytes(Program.ConfigPath)), Program.JsonOptions())
-                    ?? throw new InvalidOperationException("Collector configuration is invalid.");
+                var config = Program.LoadConfig();
                 delay = Math.Max(30, config.IntervalSeconds);
                 target = config.BaseUrl;
                 await Report(config, startedAt, previousError, stoppingToken);
@@ -273,6 +278,128 @@ internal static class CollectorLoop
             throw new InvalidOperationException($"Server rejected report with HTTP {(int)response.StatusCode}: {detail}");
         }
     }
+}
+
+internal static class AiBridgeLoop
+{
+    public static async Task Run(CancellationToken stoppingToken)
+    {
+        var enabled = false;
+        var available = false;
+        var nextHeartbeat = DateTimeOffset.MinValue;
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            var delaySeconds = 5;
+            try
+            {
+                var config = Program.LoadConfig();
+                if (!config.Scope.Equals("LAN", StringComparison.OrdinalIgnoreCase))
+                {
+                    await Delay(delaySeconds, stoppingToken);
+                    continue;
+                }
+                if (DateTimeOffset.UtcNow >= nextHeartbeat)
+                {
+                    var bootstrap = await Heartbeat(config, false, null, null, stoppingToken);
+                    enabled = bootstrap.Enabled;
+                    if (enabled)
+                    {
+                        var probe = await ProbeOllama(bootstrap.ConfiguredModel, stoppingToken);
+                        available = probe.Available;
+                        var state = await Heartbeat(config, available, bootstrap.ConfiguredModel, probe.Error, stoppingToken);
+                        enabled = state.Enabled;
+                        delaySeconds = Math.Clamp(state.PollSeconds, 2, 30);
+                    }
+                    else available = false;
+                    nextHeartbeat = DateTimeOffset.UtcNow.AddSeconds(30);
+                }
+                if (enabled && available) { delaySeconds = 2; await ProcessOneJob(config, stoppingToken); }
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { }
+            catch (Exception error)
+            {
+                Program.Log($"AI bridge cycle failed: {Clean(error.Message)}");
+                delaySeconds = 15;
+            }
+            await Delay(delaySeconds, stoppingToken);
+        }
+    }
+
+    private static async Task<BridgeHeartbeatResponse> Heartbeat(AgentConfig config, bool available, string? model, string? error, CancellationToken token)
+    {
+        using var http = CloudClient(config, TimeSpan.FromSeconds(20));
+        var payload = JsonSerializer.Serialize(new { available, model, agentVersion = Program.AgentVersion, error = error == null ? null : Clean(error) }, Program.JsonOptions());
+        using var response = await http.PostAsync($"{config.BaseUrl}/api/ai/bridge/collector/heartbeat", new StringContent(payload, Encoding.UTF8, "application/json"), token);
+        response.EnsureSuccessStatusCode();
+        return JsonSerializer.Deserialize<BridgeHeartbeatResponse>(await response.Content.ReadAsStringAsync(token), Program.JsonOptions())
+            ?? throw new InvalidOperationException("AI bridge heartbeat response was invalid.");
+    }
+
+    private static async Task<(bool Available, string? Error)> ProbeOllama(string model, CancellationToken token)
+    {
+        try
+        {
+            using var http = new HttpClient { BaseAddress = new Uri("http://127.0.0.1:11434"), Timeout = TimeSpan.FromSeconds(5) };
+            using var response = await http.GetAsync("/api/tags", token);
+            response.EnsureSuccessStatusCode();
+            using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(token));
+            var found = document.RootElement.GetProperty("models").EnumerateArray().Any(item =>
+                item.TryGetProperty("name", out var name) && string.Equals(name.GetString(), model, StringComparison.OrdinalIgnoreCase));
+            return found ? (true, null) : (false, $"Ollama model '{model}' is not installed. Run: ollama pull {model}");
+        }
+        catch (Exception error) { return (false, $"Ollama is unavailable on 127.0.0.1:11434: {Clean(error.Message)}"); }
+    }
+
+    private static async Task ProcessOneJob(AgentConfig config, CancellationToken token)
+    {
+        using var cloud = CloudClient(config, TimeSpan.FromSeconds(20));
+        using var response = await cloud.GetAsync($"{config.BaseUrl}/api/ai/bridge/collector/jobs/next", token);
+        if (response.StatusCode == HttpStatusCode.NoContent) return;
+        response.EnsureSuccessStatusCode();
+        var job = JsonSerializer.Deserialize<BridgeJob>(await response.Content.ReadAsStringAsync(token), Program.JsonOptions())
+            ?? throw new InvalidOperationException("AI bridge job was invalid.");
+        try
+        {
+            var answer = await RunOllama(job, token);
+            await Complete(cloud, config, job.JobId, true, answer, null, token);
+        }
+        catch (Exception error)
+        {
+            await Complete(cloud, config, job.JobId, false, null, Clean(error.Message), token);
+        }
+    }
+
+    private static async Task<string> RunOllama(BridgeJob job, CancellationToken token)
+    {
+        using var ollama = new HttpClient { BaseAddress = new Uri("http://127.0.0.1:11434"), Timeout = TimeSpan.FromMilliseconds(Math.Clamp(job.TimeoutMillis, 5_000, 120_000)) };
+        var payload = JsonSerializer.Serialize(new { model = job.Model, messages = job.Messages, stream = false }, Program.JsonOptions());
+        using var response = await ollama.PostAsync("/api/chat", new StringContent(payload, Encoding.UTF8, "application/json"), token);
+        response.EnsureSuccessStatusCode();
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(token));
+        var content = document.RootElement.GetProperty("message").GetProperty("content").GetString()?.Trim();
+        if (string.IsNullOrWhiteSpace(content)) throw new InvalidOperationException("Ollama returned an empty response.");
+        return content.Length <= 100_000 ? content : content[..100_000];
+    }
+
+    private static async Task Complete(HttpClient http, AgentConfig config, string jobId, bool success, string? content, string? error, CancellationToken token)
+    {
+        var payload = JsonSerializer.Serialize(new { success, content, error }, Program.JsonOptions());
+        using var response = await http.PostAsync($"{config.BaseUrl}/api/ai/bridge/collector/jobs/{Uri.EscapeDataString(jobId)}/complete", new StringContent(payload, Encoding.UTF8, "application/json"), token);
+        response.EnsureSuccessStatusCode();
+    }
+
+    private static HttpClient CloudClient(AgentConfig config, TimeSpan timeout)
+    {
+        var http = new HttpClient { Timeout = timeout };
+        http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", config.Token);
+        return http;
+    }
+    private static string Clean(string value)
+    {
+        var clean = Regex.Replace(value, "[\\r\\n]+", " ").Trim();
+        return clean.Length > 500 ? clean[..500] : clean;
+    }
+    private static async Task Delay(int seconds, CancellationToken token) { try { await Task.Delay(TimeSpan.FromSeconds(seconds), token); } catch (OperationCanceledException) { } }
 }
 
 internal static class InventoryReader

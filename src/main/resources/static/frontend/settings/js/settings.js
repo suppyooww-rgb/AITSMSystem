@@ -14,7 +14,7 @@ function setAiMessage(message, error = false) {
   const node = document.getElementById('aiConfigMessage');
   if (node) { node.textContent = message; node.classList.toggle('text-danger', error); }
 }
-function setAiButtonsDisabled(disabled) { const button = document.getElementById('aiSaveConfigBtn'); if (button) button.disabled = disabled; }
+function setAiButtonsDisabled(disabled) { ['aiSaveConfigBtn', 'aiTestBridgeBtn'].forEach(id => { const button = document.getElementById(id); if (button) button.disabled = disabled; }); }
 
 function refreshOllamaCommand() {
   const model = document.getElementById('ollamaModel')?.value.trim() || 'qwen3:8b';
@@ -86,15 +86,25 @@ async function loadAiConfig() {
   const data = await fetchJsonOrThrow('/api/ai/config');
   document.getElementById('ollamaModel').value = data.ollamaModel || 'qwen3:8b';
   refreshOllamaCommand();
-  setAiMessage('Model preference loaded. Ollama is not connected because the secure AI Bridge has not been implemented yet.');
+  const status = document.getElementById('ollamaBridgeStatus');
+  if (status) { status.textContent = data.localBridgeAvailable ? 'Online' : 'Not connected'; status.className = `status-pill ${data.localBridgeAvailable ? 'status-pill-success' : 'status-pill-warning'}`; }
+  const bridge = await fetchJsonOrThrow('/api/ai/bridge/status');
+  setAiMessage(bridge.message, !bridge.available && bridge.enabledCollectors > 0);
 }
 async function saveAiConfig() {
   const ollamaModel = document.getElementById('ollamaModel').value.trim();
   if (!ollamaModel) return setAiMessage('An Ollama model identifier is required.', true);
   setAiButtonsDisabled(true); setAiMessage('Saving Ollama model preference...');
-  try { await fetchJsonOrThrow('/api/ai/config', { method: 'POST', body: JSON.stringify({ ollamaModel }) }, true); setAiMessage('Ollama model preference saved. Local AI remains unavailable until the secure AI Bridge is installed.'); }
+  try { await fetchJsonOrThrow('/api/ai/config', { method: 'POST', body: JSON.stringify({ ollamaModel }) }, true); setAiMessage('Ollama model preference saved. The bridge will verify that exact model on its next heartbeat.'); await loadAiConfig(); }
   catch (error) { setAiMessage(error.message || 'Unable to save the Ollama model preference.', true); }
   finally { setAiButtonsDisabled(false); }
+}
+
+async function testAiBridge() {
+  setAiButtonsDisabled(true); setAiMessage('Sending a test job through the secure AI Bridge…');
+  try { const result = await fetchJsonOrThrow('/api/ai/bridge/test', { method: 'POST' }); setAiMessage(result.message || 'AI Bridge test passed.'); }
+  catch (error) { setAiMessage(error.message || 'AI Bridge test failed.', true); }
+  finally { setAiButtonsDisabled(false); await loadAiConfig().catch(() => {}); }
 }
 
 function collectorFilename(response) {
@@ -146,6 +156,9 @@ function collectorActionMenu(item, index) {
   const actions = [
     `<button type='button' onclick='downloadCollectorDiagnostics(${id})'>Download diagnostics</button>`
   ];
+  if (item.scope === 'LAN' && item.state !== 'REVOKED') {
+    actions.push(`<button type='button' onclick='setCollectorAiBridge(${id}, ${!item.aiBridgeEnabled})'>${item.aiBridgeEnabled ? 'Disable' : 'Enable'} AI Bridge</button>`);
+  }
   if (item.state !== 'REVOKED') {
     actions.push(`<button type='button' onclick='repairCollector(${id})'>Download repair installer</button>`);
     actions.push(`<button class='collector-menu-danger' type='button' onclick='revokeCollector(${id})'>Revoke collector</button>`);
@@ -207,7 +220,17 @@ async function loadCollectors() {
   const rows = document.getElementById('collectorRows');
   const collectors = await fetchJsonOrThrow('/api/monitoring/collectors');
   collectorRecords = new Map(collectors.map(item => [item.collectorId, item]));
-  rows.innerHTML = collectors.length ? collectors.map((item, index) => `<tr><td>${aitsmEscapeHtml(item.name)}<div class='small'>${aitsmEscapeHtml(item.statusReason || '')}</div><div class='small'>Agent ${aitsmEscapeHtml(item.agentVersion || 'legacy')} · Failures ${Number(item.consecutiveFailures || 0)}</div>${item.lastReportedError ? `<div class='small text-danger'>Last error: ${aitsmEscapeHtml(item.lastReportedError)}</div>` : ''}</td><td>${aitsmEscapeHtml(item.scope)}</td><td><span class='badge ${item.state === 'ONLINE' ? 'resolved' : 'warning'}'>${aitsmEscapeHtml(item.state)}</span></td><td>${aitsmEscapeHtml(item.lastSeenAt ? new Date(item.lastSeenAt).toLocaleString() : 'Never')}</td><td class='collector-actions-cell'>${collectorActionMenu(item, index)}</td></tr>`).join('') : `<tr><td colspan='5'>No collectors enrolled.</td></tr>`;
+  rows.innerHTML = collectors.length ? collectors.map((item, index) => `<tr><td>${aitsmEscapeHtml(item.name)}<div class='small'>${aitsmEscapeHtml(item.statusReason || '')}</div><div class='small'>Agent ${aitsmEscapeHtml(item.agentVersion || 'legacy')} · Failures ${Number(item.consecutiveFailures || 0)}</div>${item.scope === 'LAN' ? `<div class='small'>AI Bridge: ${item.aiBridgeEnabled ? (item.aiBridgeAvailable ? 'ready' : 'enabled, waiting for Ollama') : 'disabled'}${item.aiBridgeModel ? ` · ${aitsmEscapeHtml(item.aiBridgeModel)}` : ''}</div>` : ''}${item.aiBridgeLastError ? `<div class='small text-danger'>AI: ${aitsmEscapeHtml(item.aiBridgeLastError)}</div>` : ''}${item.lastReportedError ? `<div class='small text-danger'>Last error: ${aitsmEscapeHtml(item.lastReportedError)}</div>` : ''}</td><td>${aitsmEscapeHtml(item.scope)}</td><td><span class='badge ${item.state === 'ONLINE' ? 'resolved' : 'warning'}'>${aitsmEscapeHtml(item.state)}</span></td><td>${aitsmEscapeHtml(item.lastSeenAt ? new Date(item.lastSeenAt).toLocaleString() : 'Never')}</td><td class='collector-actions-cell'>${collectorActionMenu(item, index)}</td></tr>`).join('') : `<tr><td colspan='5'>No collectors enrolled.</td></tr>`;
+}
+
+async function setCollectorAiBridge(id, enabled) {
+  closeCollectorActionMenus();
+  const item = collectorRecords.get(id); if (!item) return;
+  if (!confirm(`${enabled ? 'Enable' : 'Disable'} AI Bridge on ${item.name}?`)) return;
+  try {
+    await fetchJsonOrThrow(`/api/ai/bridge/collectors/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify({ enabled }) }, true);
+    await Promise.all([loadCollectors(), loadAiConfig()]);
+  } catch (error) { showAppAlert(error.message || 'Unable to update AI Bridge.'); }
 }
 
 async function revokeCollector(id) {
@@ -232,6 +255,7 @@ async function archiveCollector(id) {
 
 document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('aiSaveConfigBtn')?.addEventListener('click', saveAiConfig);
+  document.getElementById('aiTestBridgeBtn')?.addEventListener('click', testAiBridge);
   document.getElementById('downloadCollectorBtn')?.addEventListener('click', downloadCollectorInstaller);
   document.getElementById('ollamaModel')?.addEventListener('input', refreshOllamaCommand);
   document.getElementById('copyOllamaCommandBtn')?.addEventListener('click', copyOllamaCommand);

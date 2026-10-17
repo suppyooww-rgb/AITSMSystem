@@ -22,7 +22,7 @@ class ProductionSchemaTest {
             "ticket_history", "notifications", "sla_policies", "system_settings", "knowledge_articles",
             "audit_logs", "ai_conversation_messages", "inventory_assets", "inventory_asset_snapshots",
             "monitoring_collectors", "monitoring_devices", "monitoring_device_addresses", "monitoring_discovery_requests",
-            "sla_risk_predictions"
+            "sla_risk_predictions", "ai_bridge_jobs"
         )
 
         runtimeTables.forEach { table ->
