@@ -156,4 +156,13 @@ class FrontendSafetyContractTest {
         assertTrue(chatService.contains("The company AI Bridge is online, but the local AI request did not finish in time"))
         assertFalse(chatService.contains("AI Bridge has not been installed"))
     }
+
+    @Test fun `end user ticket creation uses the shared authenticated request client`() {
+        val createTicket = Files.readString(Path.of("src/main/resources/static/frontend/create-ticket/js/tickets.js"))
+
+        assertTrue(createTicket.contains("await window.aitsmReady"))
+        assertTrue(createTicket.contains("window.aitsmFetchJson('/api/ai/ticket-insights'"))
+        assertTrue(createTicket.contains("window.aitsmFetchJson('/api/tickets'"))
+        assertFalse(createTicket.contains("headers: authHeaders()"))
+    }
 }
