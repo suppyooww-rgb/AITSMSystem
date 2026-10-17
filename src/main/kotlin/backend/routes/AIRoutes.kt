@@ -30,6 +30,8 @@ import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.put
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.util.UUID
 
 private val aiRateLimiter = RateLimiter(limit = 20, windowMillis = 60_000L)
@@ -74,7 +76,10 @@ fun Route.aiRoutes(chatService: AIChatService, configService: AIConfigService, t
             return@post
         }
 
-        call.respond(chatService.chat(call.userId()!!, call.resolveSessionId(), message))
+        val userId = call.userId()!!
+        val sessionId = call.resolveSessionId()
+        val response = withContext(Dispatchers.IO) { chatService.chat(userId, sessionId, message) }
+        call.respond(response)
     }
 
     post("/api/ai-assistant/chat") {
@@ -90,7 +95,10 @@ fun Route.aiRoutes(chatService: AIChatService, configService: AIConfigService, t
             call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Message exceeds 2000 characters"))
             return@post
         }
-        call.respond(chatService.chat(call.userId()!!, call.resolveSessionId(), message))
+        val userId = call.userId()!!
+        val sessionId = call.resolveSessionId()
+        val response = withContext(Dispatchers.IO) { chatService.chat(userId, sessionId, message) }
+        call.respond(response)
     }
 
     post("/api/ai/clear") {
@@ -110,7 +118,8 @@ fun Route.aiRoutes(chatService: AIChatService, configService: AIConfigService, t
         if (!call.requireAiCapacity()) return@post
         val request = call.receive<TicketAiAnalysisRequest>()
         require(request.description.trim().length >= 10) { "Describe the issue in at least 10 characters." }
-        call.respond(ticketAiAdvisor.analyze(request))
+        val analysis = withContext(Dispatchers.IO) { ticketAiAdvisor.analyze(request) }
+        call.respond(analysis)
     }
 
     post("/api/ai/tickets/{id}/assist") {
@@ -118,7 +127,7 @@ fun Route.aiRoutes(chatService: AIChatService, configService: AIConfigService, t
         if (!call.requireAiCapacity()) return@post
         val ticketId = call.parameters["id"]?.toIntOrNull()
             ?: return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid ticket id"))
-        val assistance = ticketAiAdvisor.assist(ticketId)
+        val assistance = withContext(Dispatchers.IO) { ticketAiAdvisor.assist(ticketId) }
             ?: return@post call.respond(HttpStatusCode.NotFound, mapOf("error" to "Ticket not found"))
         call.respond(assistance)
     }
@@ -147,7 +156,7 @@ fun Route.aiRoutes(chatService: AIChatService, configService: AIConfigService, t
 
     post("/api/ai/bridge/test") {
         if (!call.requireRole(UserRole.ADMIN)) return@post
-        val result = bridgeService.testConnection()
+        val result = withContext(Dispatchers.IO) { bridgeService.testConnection() }
         if (result.ok) call.respond(AIBridgeTestResponse(true, message = "AITSM reached Ollama through the secure AI Bridge."))
         else call.respond(HttpStatusCode.ServiceUnavailable, AIBridgeTestResponse(false, error = result.errorMessage ?: "Local AI test failed"))
     }

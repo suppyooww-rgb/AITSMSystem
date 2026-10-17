@@ -146,4 +146,14 @@ class FrontendSafetyContractTest {
         assertFalse(settingsScript.contains("Gemini"))
         assertFalse(settingsScript.contains("fetch('http://127.0.0.1:11434"))
     }
+
+    @Test fun `ai work does not block collector requests and fallback messages remain accurate`() {
+        val routes = Files.readString(Path.of("src/main/kotlin/backend/routes/AIRoutes.kt"))
+        val chatService = Files.readString(Path.of("src/main/kotlin/backend/services/ai/AIChatService.kt"))
+
+        assertTrue(routes.contains("withContext(Dispatchers.IO) { chatService.chat"))
+        assertTrue(routes.contains("withContext(Dispatchers.IO) { bridgeService.testConnection() }"))
+        assertTrue(chatService.contains("The company AI Bridge is online, but the local AI request did not finish in time"))
+        assertFalse(chatService.contains("AI Bridge has not been installed"))
+    }
 }

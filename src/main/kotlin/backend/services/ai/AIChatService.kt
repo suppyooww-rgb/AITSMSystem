@@ -125,7 +125,7 @@ class AIChatService(
             source = "fallback",
             reachable = false,
             reply = null,
-            fallback = buildFallback(userInput),
+            fallback = buildFallback(userInput, error),
             conversationSize = conversationSize,
             provider = providerName,
             model = modelName,
@@ -133,12 +133,24 @@ class AIChatService(
         )
     }
 
-    private fun buildFallback(userInput: String): AIFallbackContent {
+    private fun buildFallback(userInput: String, error: String): AIFallbackContent {
         val summary = userInput.trim().take(180).ifBlank { "Unable to analyze issue due to provider connectivity." }
+        val timedOut = error.contains("did not respond in time", ignoreCase = true) ||
+            error.contains("expired before completion", ignoreCase = true)
+        val availabilityMessage = if (timedOut) {
+            "The company AI Bridge is online, but the local AI request did not finish in time. Please retry or continue with the guidance below."
+        } else {
+            "Company local AI is temporarily unavailable. You can continue with the guidance below or create a support ticket."
+        }
+        val likelyCause = if (timedOut) {
+            "The company AI model exceeded the response timeout"
+        } else {
+            "The company AI Bridge or configured model is not currently available"
+        }
         return AIFallbackContent(
-            message = "Local AI is not available yet because the secure AITSM AI Bridge has not been installed. You can continue with the guidance below or create a support ticket.",
+            message = availabilityMessage,
             issueSummary = summary,
-            likelyCauses = listOf("The secure local AI bridge is not available"),
+            likelyCauses = listOf(likelyCause),
             troubleshootingSteps = listOf(
                 "Continue with the deterministic troubleshooting checklist",
                 "Contact an AITSM administrator if local AI assistance is required"
@@ -146,7 +158,7 @@ class AIChatService(
             escalationCriteria = listOf("Escalate when the issue requires diagnosis beyond the available deterministic guidance"),
             suggestedPriority = "Medium",
             ticketTitle = "IT support request",
-            ticketDescription = "Local AI assistance is pending the secure AITSM AI Bridge. Continue with manual troubleshooting and technician review."
+            ticketDescription = "Company local AI could not complete the request. Continue with manual troubleshooting and technician review."
         )
     }
 
