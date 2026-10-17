@@ -435,7 +435,7 @@ async function submitTicketTransition(event) {
 
 function actionMenu(ticket) {
   const current = normalizeStatus(ticket.status);
-  const actions = [];
+  const actions = [`<button type='button' onclick='location.href="${adminTicketHref(ticket.id)}"'>View details</button>`];
   const currentUserId = Number(window.currentUser?.id || 0);
   const ownerId = Number(ticket.assignedToUserId || 0);
   const ownedByMe = ownerId > 0 && ownerId === currentUserId;
@@ -451,7 +451,12 @@ function actionMenu(ticket) {
   if (superAdmin && ownerId > 0 && !ownedByMe && !['resolved', 'closed'].includes(current)) {
     actions.push(`<button type='button' onclick='openTicketAssignment(${ticket.id}, "reassign")'>Reassign ticket</button>`);
   }
-  const lockMessage = !unassigned && !ownedByMe ? `<span class='small'>Handled by ${escapeHtml(ticket.assignedTo || 'another administrator')}</span>` : '';
+  const completedMessage = ['resolved', 'closed'].includes(current) && unassigned
+    ? `<span class='small'>Legacy ${statusLabel(ticket.status)} ticket · read-only</span>`
+    : '';
+  const lockMessage = !unassigned && !ownedByMe
+    ? `<span class='small'>Handled by ${escapeHtml(ticket.assignedTo || 'another administrator')}</span>`
+    : completedMessage;
   return `<div class='row-action-wrap'>
     <button class='btn btn-ghost icon-btn' onclick='toggleAdminRowMenu(event, ${ticket.id})' title='Actions' aria-label='Actions'>...</button>
     <div id='adminTicketRowMenu-${ticket.id}' class='row-action-menu hidden'>

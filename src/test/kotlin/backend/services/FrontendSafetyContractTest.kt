@@ -86,6 +86,20 @@ class FrontendSafetyContractTest {
         assertTrue(service.contains("UserRole.ADMIN, UserRole.IT_ADMIN, UserRole.SUPERADMIN"))
     }
 
+    @Test fun `admin operational feed refreshes live and limits the dashboard snapshot`() {
+        val dashboard = Files.readString(Path.of("src/main/resources/static/frontend/dashboard-admin/js/dashboard.js"))
+        val dashboardHtml = Files.readString(Path.of("src/main/resources/static/frontend/dashboard-admin/html/dashboard-admin.html"))
+        val tickets = Files.readString(Path.of("src/main/resources/static/frontend/ticket-management/js/admin-ticket-management.js"))
+
+        assertTrue(dashboard.contains("DASHBOARD_FEED_REFRESH_MS = 10 * 1000"))
+        assertTrue(dashboard.contains("window.setInterval(refreshDashboardFeed, DASHBOARD_FEED_REFRESH_MS)"))
+        assertTrue(dashboard.contains(".slice(0, 8)"))
+        assertTrue(dashboardHtml.contains("id='adminOpsFeedStatus'"))
+        assertTrue(dashboardHtml.contains("Older items remain available from the notification bell."))
+        assertTrue(tickets.contains("View details"))
+        assertTrue(tickets.contains("Legacy \${statusLabel(ticket.status)} ticket · read-only"))
+    }
+
     @Test fun `device surfaces are collector only and inventory details are click through`() {
         val monitoring = Files.readString(Path.of("src/main/kotlin/backend/services/MonitoringService.kt"))
         val inventoryService = Files.readString(Path.of("src/main/kotlin/backend/services/InventoryService.kt"))
