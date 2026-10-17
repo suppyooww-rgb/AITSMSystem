@@ -39,6 +39,7 @@ class CollectorInstallerContractTest {
     @Test fun `self service enrollment remains owner and role scoped`() {
         val service = Files.readString(Path.of("src/main/kotlin/backend/services/MonitoringService.kt"))
         val routes = Files.readString(Path.of("src/main/kotlin/backend/routes/MonitoringRoutes.kt"))
+        val repository = Files.readString(Path.of("src/main/kotlin/backend/repository/MonitoringRepository.kt"))
         assertTrue(service.contains("val scope = if (admin) requestedScope else \"SELF\""))
         assertTrue(service.contains("if (collector.scope != \"LAN\") return null"))
         assertTrue(service.contains("Self-device collectors may report exactly one device"))
@@ -46,6 +47,8 @@ class CollectorInstallerContractTest {
         assertTrue(routes.contains("service.canRepairCollector(request.repairCollectorId, actorId, call.userRole())"))
         assertTrue(routes.contains("service.revokeOwned(id, actorId)"))
         assertTrue(service.contains("repairCollectorId = repairCollectorId"))
+        assertTrue(repository.contains("MonitoringCollectorsTable.scope eq \"LAN\""))
+        assertTrue(repository.contains("No active company/LAN collector is enrolled."))
     }
 
     @Test fun `enrollment migration stores hashes and ownership without raw secrets`() {

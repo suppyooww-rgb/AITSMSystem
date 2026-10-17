@@ -35,6 +35,8 @@ class FrontendSafetyContractTest {
         assertFalse(monitoring.contains("discoverArpPeers"))
         assertTrue(frontend.contains("Last data received"))
         assertFalse(frontend.contains("Host CPU"))
+        assertTrue(frontend.contains("waiting for LAN collector"))
+        assertTrue(frontend.contains("['PENDING', 'IN_PROGRESS'].includes(discoveryState)"))
     }
 
     @Test fun `asset registration accepts normal IPv4 addresses in the browser`() {

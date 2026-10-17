@@ -286,7 +286,11 @@ async function loadMonitoring({ force = false, source = 'manual' } = {}) {
     renderLanIpSuggestions(safePeerIps);
 
     monitoringLastUpdatedAt = summary.timestamp || monitoringLastUpdatedAt;
-    updateMonitoringLiveStatus('live', source === 'queued' ? 'Discovery pending on collector' : undefined);
+    const discoveryState = String(summary.discoveryState || '').toUpperCase();
+    const discoveryPending = ['PENDING', 'IN_PROGRESS'].includes(discoveryState);
+    updateMonitoringLiveStatus('live', discoveryPending
+      ? `Discovery ${discoveryState.toLowerCase().replace('_', ' ')}; waiting for LAN collector`
+      : (source === 'queued' ? 'Discovery queued; waiting for LAN collector' : undefined));
   } catch {
     monitoringDevicesCache = [];
     renderMonitorTableCount(0, 0);

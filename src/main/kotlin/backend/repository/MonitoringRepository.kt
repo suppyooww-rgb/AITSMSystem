@@ -365,9 +365,13 @@ class MonitoringRepository(private val clock: Clock = Clock.systemUTC()) {
     }
 
     fun queueDiscovery(): Pair<UUID, UUID> = transaction {
-        val collector = MonitoringCollectorsTable.selectAll().where { MonitoringCollectorsTable.revokedAt.isNull() }
+        val collector = MonitoringCollectorsTable.selectAll().where {
+            MonitoringCollectorsTable.revokedAt.isNull() and
+                MonitoringCollectorsTable.archivedAt.isNull() and
+                (MonitoringCollectorsTable.scope eq "LAN")
+        }
             .orderBy(MonitoringCollectorsTable.lastSeenAt, SortOrder.DESC_NULLS_LAST).limit(1).singleOrNull()
-            ?: error("No collector is enrolled.")
+            ?: error("No active company/LAN collector is enrolled.")
         val requestId = UUID.randomUUID()
         DiscoveryRequestsTable.insert {
             it[id] = requestId
