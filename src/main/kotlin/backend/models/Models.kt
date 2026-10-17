@@ -177,9 +177,24 @@ data class Ticket(
 )
 
 @Serializable data class TicketRequest(val title: String, val description: String, val priority: String, val category: String, val deviceId: Int? = null)
-@Serializable data class TicketStatusUpdate(val status: String)
+@Serializable data class TicketStatusUpdate(
+    val status: String,
+    val note: String? = null,
+    val userMessage: String? = null,
+    val resolutionCategory: String? = null,
+    val notifyRequester: Boolean = true
+)
 @Serializable data class TicketResolutionUpdate(val resolution: String)
-@Serializable data class TicketHistoryEvent(val status: String, val updatedBy: String, val timestamp: String)
+@Serializable data class TicketHistoryEvent(
+    val status: String,
+    val previousStatus: String? = null,
+    val note: String? = null,
+    val userMessage: String? = null,
+    val resolutionCategory: String? = null,
+    val notifyRequester: Boolean = false,
+    val updatedBy: String,
+    val timestamp: String
+)
 
 @Serializable
 data class Device(

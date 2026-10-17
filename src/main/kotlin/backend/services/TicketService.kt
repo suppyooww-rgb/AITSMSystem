@@ -23,6 +23,10 @@ class TicketService(
     private val followUpThresholdHours = 24L
     private val allowedPriorities = setOf("Critical", "High", "Medium", "Low")
     private val allowedCategories = setOf("Hardware", "Software", "Network", "Database", "Security", "Other")
+    private val resolutionCategories = setOf(
+        "Configuration Change", "Software Fix", "Hardware Repair", "Access Restored",
+        "Network Fix", "User Guidance", "Workaround", "No Fault Found", "Other"
+    )
 
     fun create(userId: Int, req: TicketRequest): Ticket {
         val normalized = normalizeTicketRequest(req)
@@ -43,6 +47,8 @@ class TicketService(
     }
     fun get(id: Int): Ticket? = repository.get(id)?.let { enrichRisk(listOf(it)).first() }
     fun history(id: Int) = repository.history(id)
+    fun actorDisplayName(userId: Int, role: UserRole): String =
+        users.findById(userId)?.let { "${it.fullName} (${role.asHeaderValue()})" } ?: "${role.asHeaderValue()}-$userId"
     fun allForAdvisory() = enrichRisk(repository.list(null, true, 500, 0).items)
 
     fun update(id: Int, req: TicketRequest, userId: Int?): Ticket? {
@@ -65,17 +71,40 @@ class TicketService(
         }
     }
 
-    fun updateStatus(id: Int, statusValue: String, actor: String, userId: Int?, role: UserRole): Ticket? {
+    fun updateStatus(
+        id: Int,
+        statusValue: String,
+        actor: String,
+        userId: Int?,
+        role: UserRole,
+        noteValue: String? = null,
+        userMessageValue: String? = null,
+        resolutionCategoryValue: String? = null,
+        notifyRequester: Boolean = true
+    ): Ticket? {
         val existing = repository.get(id) ?: return null
         val requestedAction = statusValue.trim().lowercase()
         val status = parseStatus(statusValue)
         val admin = Permission.TICKET_MANAGE in PermissionMatrix.permissions(role)
         if (existing.status == status) return existing
+        val note = noteValue?.trim()?.takeIf { it.isNotBlank() }
+        val userMessage = userMessageValue?.trim()?.takeIf { it.isNotBlank() }
+        val resolutionCategory = resolutionCategoryValue?.trim()?.takeIf { it.isNotBlank() }
 
         when {
             admin -> {
                 require(status in setOf(TicketStatus.OPEN, TicketStatus.PENDING, TicketStatus.RESOLVED, TicketStatus.CLOSED)) { "Unsupported status for admin" }
                 require(requestedAction !in setOf("cancelled", "canceled", "cancel")) { "Admin cannot cancel tickets" }
+                require(note != null && note.length >= 5) { "A work note of at least 5 characters is required for every administrator status change" }
+                require(note.length <= 4_000) { "Work note must not exceed 4,000 characters" }
+                require(userMessage == null || userMessage.length <= 4_000) { "Requester message must not exceed 4,000 characters" }
+                if (status == TicketStatus.RESOLVED) {
+                    require(userMessage != null && userMessage.length >= 10) { "A requester-visible resolution of at least 10 characters is required" }
+                    require(resolutionCategory in resolutionCategories) { "Select a valid resolution category" }
+                }
+                if (status == TicketStatus.CLOSED) {
+                    require(existing.status == TicketStatus.RESOLVED) { "Resolve the ticket before closing it" }
+                }
             }
             else -> {
                 require(existing.userId == (userId ?: -1)) { "You can only modify your own tickets" }
@@ -102,18 +131,34 @@ class TicketService(
             }
         }
 
-        return repository.updateStatus(id, status.name, actor, recordFirstResponse = admin)?.let { enrichRisk(listOf(it)).first() }?.also { updated ->
-            audit.log(userId, "Changed ticket #$id to ${status.name}", "tickets")
+        val recordedNote = note ?: when {
+            requestedAction in setOf("cancelled", "canceled", "cancel") -> "Requester cancelled the ticket"
+            status == TicketStatus.CLOSED -> "Requester confirmed the resolution and closed the ticket"
+            else -> "Requester requested follow-up"
+        }
+        return repository.updateStatus(
+            id = id,
+            newStatus = status.name,
+            updatedBy = actor,
+            workNote = recordedNote,
+            userMessageValue = userMessage,
+            resolutionCategoryValue = resolutionCategory,
+            notifyRequesterValue = admin && notifyRequester,
+            recordFirstResponse = admin
+        )?.let { enrichRisk(listOf(it)).first() }?.also { updated ->
+            audit.log(userId, "Changed ticket #$id from ${existing.status.name} to ${status.name} with a recorded work note", "tickets")
             if (admin) {
                 val displayStatus = status.name.lowercase().replace('_', ' ').replaceFirstChar { it.titlecase() }
-                notifications.pushOncePerTicketEvent(
-                    userId = updated.userId,
-                    eventType = "ticket_status_updated_${status.name.lowercase()}",
-                    ticketId = updated.id,
-                    title = "Ticket Status Updated",
-                    message = "Ticket #${updated.id} updated to $displayStatus",
-                    occurrenceKey = updated.updatedAt
-                )
+                if (notifyRequester) {
+                    notifications.pushOncePerTicketEvent(
+                        userId = updated.userId,
+                        eventType = "ticket_status_updated_${status.name.lowercase()}",
+                        ticketId = updated.id,
+                        title = "Ticket Status Updated",
+                        message = userMessage ?: "Ticket #${updated.id} updated to $displayStatus",
+                        occurrenceKey = updated.updatedAt
+                    )
+                }
                 if (existing.slaFirstResponseAt == null && updated.slaResponseState == "BREACHED") {
                     notifySlaBreach(updated, "response")
                 }

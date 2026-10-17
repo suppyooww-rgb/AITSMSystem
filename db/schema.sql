@@ -98,10 +98,15 @@ CREATE TABLE IF NOT EXISTS tickets (
 );
 
 CREATE TABLE IF NOT EXISTS ticket_history (
-  id SERIAL PRIMARY KEY,
-  ticket_id INT REFERENCES tickets(id),
-  status VARCHAR(30) NOT NULL,
-  updated_by VARCHAR(150) NOT NULL,
+    id SERIAL PRIMARY KEY,
+    ticket_id INT REFERENCES tickets(id),
+    status VARCHAR(30) NOT NULL,
+    previous_status VARCHAR(30),
+    work_note TEXT,
+    user_message TEXT,
+    resolution_category VARCHAR(80),
+    notify_requester BOOLEAN NOT NULL DEFAULT FALSE,
+    updated_by VARCHAR(150) NOT NULL,
   timestamp TIMESTAMP NOT NULL
 );
 

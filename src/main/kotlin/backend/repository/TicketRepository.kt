@@ -51,6 +51,11 @@ class TicketRepository {
         TicketHistoryTable.insert {
             it[ticketId] = id
             it[status] = TicketStatus.OPEN.name
+            it[previousStatus] = null
+            it[workNote] = "Ticket created"
+            it[userMessage] = null
+            it[resolutionCategory] = null
+            it[notifyRequester] = false
             it[updatedBy] = "user-$userId"
             it[timestamp] = now
         }
@@ -74,6 +79,11 @@ class TicketRepository {
             .map {
                 TicketHistoryEvent(
                     status = it[TicketHistoryTable.status],
+                    previousStatus = it[TicketHistoryTable.previousStatus],
+                    note = it[TicketHistoryTable.workNote],
+                    userMessage = it[TicketHistoryTable.userMessage],
+                    resolutionCategory = it[TicketHistoryTable.resolutionCategory],
+                    notifyRequester = it[TicketHistoryTable.notifyRequester],
                     updatedBy = it[TicketHistoryTable.updatedBy],
                     timestamp = it[TicketHistoryTable.timestamp].toString()
                 )
@@ -104,7 +114,16 @@ class TicketRepository {
         get(id)
     }
 
-    fun updateStatus(id: Int, newStatus: String, updatedBy: String, recordFirstResponse: Boolean = false): Ticket? = transaction {
+    fun updateStatus(
+        id: Int,
+        newStatus: String,
+        updatedBy: String,
+        workNote: String?,
+        userMessageValue: String?,
+        resolutionCategoryValue: String?,
+        notifyRequesterValue: Boolean,
+        recordFirstResponse: Boolean = false
+    ): Ticket? = transaction {
         val now = LocalDateTime.now()
         val existing = TicketsTable.selectAll().where { TicketsTable.id eq id }.singleOrNull() ?: return@transaction null
         val oldStatus = runCatching { TicketStatus.valueOf(existing[TicketsTable.status]) }.getOrDefault(TicketStatus.OPEN)
@@ -131,10 +150,20 @@ class TicketRepository {
                 it[slaResolvedAt] = null
                 it[slaReopenedCount] = existing[TicketsTable.slaReopenedCount] + 1
             }
+            if (nextStatus == TicketStatus.RESOLVED && !userMessageValue.isNullOrBlank()) {
+                it[reviewedResolution] = userMessageValue
+                it[resolutionUpdatedBy] = updatedBy
+                it[resolutionUpdatedAt] = now
+            }
         }
         TicketHistoryTable.insert {
             it[ticketId] = id
             it[status] = newStatus
+            it[previousStatus] = oldStatus.name
+            it[TicketHistoryTable.workNote] = workNote
+            it[userMessage] = userMessageValue
+            it[resolutionCategory] = resolutionCategoryValue
+            it[notifyRequester] = notifyRequesterValue
             it[TicketHistoryTable.updatedBy] = updatedBy
             it[timestamp] = now
         }

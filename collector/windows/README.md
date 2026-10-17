@@ -69,4 +69,4 @@ dotnet publish collector/windows/installer/AITSMCollectorSetup.csproj -c Release
 Copy-Item collector/windows/installer/publish/AITSMCollectorSetup.exe src/main/resources/collector/AITSMCollectorSetup.exe -Force
 ```
 
-The packaged EXE is served only after an authenticated, CSRF-protected request whose enrollment code belongs to the requesting account. Deployment must apply migrations through `V014__secure_ollama_ai_bridge.sql` before starting this application revision.
+The packaged EXE is served only after an authenticated, CSRF-protected request whose enrollment code belongs to the requesting account. Deployment must apply migrations through `V015__ticket_transition_notes.sql` before starting this application revision.

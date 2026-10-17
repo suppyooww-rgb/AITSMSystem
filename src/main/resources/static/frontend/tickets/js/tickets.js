@@ -82,6 +82,51 @@ function renderRequestedTicketDetails(tickets) {
   document.getElementById('selectedTicketResolutionMeta').textContent = ticket.resolutionUpdatedAt
     ? `Last updated ${parseDate(ticket.resolutionUpdatedAt)?.toLocaleString() || ticket.resolutionUpdatedAt}.`
     : '';
+  loadMyTicketHistory(ticket.id);
+}
+
+function userHistoryStatus(value) {
+  const normalized = String(value || '').replaceAll('_', ' ').toLowerCase();
+  if (normalized === 'pending') return 'In Progress';
+  return normalized ? normalized.replace(/\b\w/g, (char) => char.toUpperCase()) : 'Updated';
+}
+
+async function loadMyTicketHistory(ticketId) {
+  const host = document.getElementById('selectedTicketActivity');
+  if (!host) return;
+  host.textContent = 'Loading activity…';
+  try {
+    const history = await window.aitsmFetchJson(`/api/tickets/${ticketId}/history`);
+    const items = (history || []).slice().reverse().map((event) => {
+      const item = document.createElement('article');
+      item.className = 'ticket-activity-item';
+      const title = document.createElement('strong');
+      title.textContent = event.previousStatus
+        ? `${userHistoryStatus(event.previousStatus)} → ${userHistoryStatus(event.status)}`
+        : userHistoryStatus(event.status);
+      const meta = document.createElement('div');
+      meta.className = 'ticket-activity-meta';
+      meta.textContent = `${event.updatedBy || 'System'} • ${parseDate(event.timestamp)?.toLocaleString() || event.timestamp}`;
+      item.append(title, meta);
+      if (event.resolutionCategory) {
+        const category = document.createElement('p');
+        category.className = 'small';
+        category.textContent = `Resolution category: ${event.resolutionCategory}`;
+        item.appendChild(category);
+      }
+      if (event.userMessage) {
+        const message = document.createElement('p');
+        message.className = 'ticket-activity-message';
+        message.textContent = event.userMessage;
+        item.appendChild(message);
+      }
+      return item;
+    });
+    host.replaceChildren(...items);
+    if (!items.length) host.textContent = 'No activity recorded.';
+  } catch (error) {
+    host.textContent = error.message || 'Unable to load ticket activity.';
+  }
 }
 
 function toggleRowActionMenu(event, id) {

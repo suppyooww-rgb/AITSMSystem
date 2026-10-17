@@ -125,6 +125,55 @@ function renderAdminTicketAiContext() {
   document.getElementById('adminTicketAiStatus').textContent = isClosed
     ? 'This ticket is closed. You can generate and copy assistance, but reopen it before saving a new resolution.'
     : 'Generate reviewable assistance. Until the local AI Bridge is available, deterministic fallback guidance is used.';
+  loadAdminTicketHistory(ticket.id);
+}
+
+function ticketStatusTransitionLabel(event) {
+  const next = statusLabel(event.status);
+  if (!event.previousStatus) return next;
+  return `${statusLabel(event.previousStatus)} → ${next}`;
+}
+
+function buildTicketActivityItem(event, includeInternalNote = true) {
+  const item = document.createElement('article');
+  item.className = 'ticket-activity-item';
+  const title = document.createElement('strong');
+  title.textContent = ticketStatusTransitionLabel(event);
+  const meta = document.createElement('div');
+  meta.className = 'ticket-activity-meta';
+  meta.textContent = `${event.updatedBy || 'System'} • ${formatDate(event.timestamp)}`;
+  item.append(title, meta);
+  if (event.resolutionCategory) {
+    const category = document.createElement('p');
+    category.className = 'small';
+    category.textContent = `Resolution category: ${event.resolutionCategory}`;
+    item.appendChild(category);
+  }
+  if (includeInternalNote && event.note) {
+    const note = document.createElement('p');
+    note.textContent = `Internal note: ${event.note}`;
+    item.appendChild(note);
+  }
+  if (event.userMessage) {
+    const message = document.createElement('p');
+    message.className = 'ticket-activity-message';
+    message.textContent = `Requester update: ${event.userMessage}`;
+    item.appendChild(message);
+  }
+  return item;
+}
+
+async function loadAdminTicketHistory(ticketId) {
+  const host = document.getElementById('adminTicketActivity');
+  if (!host) return;
+  host.replaceChildren(Object.assign(document.createElement('p'), { className: 'small', textContent: 'Loading activity…' }));
+  try {
+    const history = await window.aitsmFetchJson(`/api/tickets/${ticketId}/history`);
+    host.replaceChildren(...(history || []).slice().reverse().map((event) => buildTicketActivityItem(event)));
+    if (!host.children.length) host.textContent = 'No activity recorded.';
+  } catch (error) {
+    host.textContent = error.message || 'Unable to load ticket activity.';
+  }
 }
 
 async function generateAdminTicketAssistance() {
@@ -233,26 +282,85 @@ function toggleAdminRowMenu(event, id) {
   menu.classList.remove('hidden');
 }
 
-async function updateTicketStatusAdmin(id, status) {
+function updateTransitionRequirements() {
+  const status = document.getElementById('ticketTransitionStatus')?.value;
+  const resolving = status === 'Resolved';
+  document.getElementById('ticketResolutionCategoryGroup')?.classList.toggle('hidden', !resolving);
+  const category = document.getElementById('ticketResolutionCategory');
+  const message = document.getElementById('ticketRequesterMessage');
+  const required = document.getElementById('ticketRequesterMessageRequired');
+  if (category) category.required = resolving;
+  if (message) message.required = resolving;
+  if (required) required.textContent = resolving ? '*' : '(optional)';
+}
+
+function openTicketTransition(id, status) {
   closeAdminRowMenus();
-  const res = await fetch(`/api/tickets/${id}/status`, {
-    method: 'PUT',
-    headers: authHeaders(),
-    body: JSON.stringify({ status })
-  });
-  const data = await res.json();
-  if (!res.ok) return alert(data.error || 'Unable to update status');
-  await loadAdminTicketManagement();
+  const ticket = adminTicketState.tickets.find((item) => Number(item.id) === Number(id));
+  const dialog = document.getElementById('ticketTransitionDialog');
+  if (!ticket || !dialog) return;
+  document.getElementById('ticketTransitionId').value = String(id);
+  document.getElementById('ticketTransitionStatus').value = status;
+  document.getElementById('ticketTransitionNote').value = '';
+  document.getElementById('ticketRequesterMessage').value = '';
+  document.getElementById('ticketResolutionCategory').value = '';
+  document.getElementById('ticketNotifyRequester').checked = true;
+  document.getElementById('ticketTransitionError').textContent = '';
+  document.getElementById('ticketTransitionMeta').textContent = `Ticket #${id}: ${ticket.title} • Currently ${statusLabel(ticket.status)}`;
+  updateTransitionRequirements();
+  dialog.showModal();
+  document.getElementById('ticketTransitionNote').focus();
+}
+
+function closeTicketTransition() {
+  document.getElementById('ticketTransitionDialog')?.close();
+}
+
+async function submitTicketTransition(event) {
+  event.preventDefault();
+  const id = Number(document.getElementById('ticketTransitionId').value);
+  const status = document.getElementById('ticketTransitionStatus').value;
+  const note = document.getElementById('ticketTransitionNote').value.trim();
+  const userMessage = document.getElementById('ticketRequesterMessage').value.trim();
+  const resolutionCategory = document.getElementById('ticketResolutionCategory').value;
+  const notifyRequester = document.getElementById('ticketNotifyRequester').checked;
+  const errorHost = document.getElementById('ticketTransitionError');
+  const submit = document.getElementById('submitTicketTransitionBtn');
+  if (note.length < 5) {
+    errorHost.textContent = 'Enter an internal work note of at least 5 characters.';
+    return;
+  }
+  if (status === 'Resolved' && (userMessage.length < 10 || !resolutionCategory)) {
+    errorHost.textContent = 'Resolving requires a resolution category and requester-visible resolution of at least 10 characters.';
+    return;
+  }
+  submit.disabled = true;
+  errorHost.textContent = '';
+  try {
+    await window.aitsmFetchJson(`/api/tickets/${id}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status, note, userMessage: userMessage || null, resolutionCategory: resolutionCategory || null, notifyRequester })
+    });
+    closeTicketTransition();
+    await loadAdminTicketManagement();
+  } catch (error) {
+    errorHost.textContent = error.message || 'Unable to update ticket status.';
+  } finally {
+    submit.disabled = false;
+  }
 }
 
 function actionMenu(ticket) {
+  const current = normalizeStatus(ticket.status);
+  const actions = [];
+  if (current !== 'open') actions.push(`<button type='button' onclick='openTicketTransition(${ticket.id}, "Open")'>Reopen ticket</button>`);
+  if (!['in progress', 'resolved', 'closed'].includes(current)) actions.push(`<button type='button' onclick='openTicketTransition(${ticket.id}, "In Progress")'>Set In Progress</button>`);
+  if (!['resolved', 'closed'].includes(current)) actions.push(`<button type='button' onclick='openTicketTransition(${ticket.id}, "Resolved")'>Resolve ticket</button>`);
+  if (current === 'resolved') actions.push(`<button type='button' onclick='openTicketTransition(${ticket.id}, "Closed")'>Close ticket</button>`);
   return `<div class='row-action-wrap'>
     <button class='btn btn-ghost icon-btn' onclick='toggleAdminRowMenu(event, ${ticket.id})' title='Actions' aria-label='Actions'>...</button>
     <div id='adminTicketRowMenu-${ticket.id}' class='row-action-menu hidden'>
-      <button type='button' onclick='updateTicketStatusAdmin(${ticket.id}, "Open")'>Set Open</button>
-      <button type='button' onclick='updateTicketStatusAdmin(${ticket.id}, "In Progress")'>Set In Progress</button>
-      <button type='button' onclick='updateTicketStatusAdmin(${ticket.id}, "Resolved")'>Set Resolved</button>
-      <button type='button' onclick='updateTicketStatusAdmin(${ticket.id}, "Closed")'>Set Closed</button>
+      ${actions.join('') || '<span class="small">No status actions available.</span>'}
     </div>
   </div>`;
 }
@@ -407,5 +515,9 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('generateTicketAiBtn')?.addEventListener('click', generateAdminTicketAssistance);
   document.getElementById('saveTicketAiDraftBtn')?.addEventListener('click', saveAdminTicketDraft);
   document.getElementById('copyTicketAiDraftBtn')?.addEventListener('click', copyAdminTicketDraft);
+  document.getElementById('ticketTransitionForm')?.addEventListener('submit', submitTicketTransition);
+  document.getElementById('ticketTransitionStatus')?.addEventListener('change', updateTransitionRequirements);
+  document.getElementById('closeTicketTransitionBtn')?.addEventListener('click', closeTicketTransition);
+  document.getElementById('cancelTicketTransitionBtn')?.addEventListener('click', closeTicketTransition);
   loadAdminTicketManagement();
 });
