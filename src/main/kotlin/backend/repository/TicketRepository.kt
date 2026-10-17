@@ -315,10 +315,17 @@ class TicketRepository {
         completed.size to completed.count { it[TicketsTable.slaResolutionBreachedAt] != null }
     }
 
-    fun updateResolution(id: Int, resolution: String, updatedBy: String, expectedAssigneeUserId: Int): Ticket? = transaction {
+    fun updateResolution(
+        id: Int,
+        resolution: String,
+        updatedBy: String,
+        expectedAssigneeUserId: Int?,
+        enforceOwner: Boolean = true
+    ): Ticket? = transaction {
         val now = LocalDateTime.now()
         val updated = TicketsTable.update({
-            (TicketsTable.id eq id) and (TicketsTable.assignedToUserId eq expectedAssigneeUserId)
+            if (enforceOwner) (TicketsTable.id eq id) and (TicketsTable.assignedToUserId eq expectedAssigneeUserId)
+            else TicketsTable.id eq id
         }) {
             it[reviewedResolution] = resolution
             it[resolutionUpdatedBy] = updatedBy

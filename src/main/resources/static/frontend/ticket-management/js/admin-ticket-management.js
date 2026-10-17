@@ -114,22 +114,24 @@ function renderAdminTicketAiContext() {
   const saveButton = document.getElementById('saveTicketAiDraftBtn');
   const isClosed = normalizeStatus(ticket.status) === 'closed';
   const ownedByMe = Number(ticket.assignedToUserId || 0) === Number(window.currentUser?.id || 0);
+  const superAdmin = String(window.currentUser?.role || '').toUpperCase() === 'SUPERADMIN';
+  const canEdit = ownedByMe || superAdmin;
   saved?.classList.toggle('hidden', !ticket.reviewedResolution);
   if (savedText) savedText.textContent = ticket.reviewedResolution || '';
   if (savedMeta) savedMeta.textContent = ticket.reviewedResolution
     ? `Last saved ${formatDate(ticket.resolutionUpdatedAt)}${ticket.resolutionUpdatedBy ? ` by ${ticket.resolutionUpdatedBy}` : ''}.`
     : '';
   if (saveButton) {
-    saveButton.disabled = isClosed || !ownedByMe;
+    saveButton.disabled = isClosed || !canEdit;
     saveButton.title = isClosed
       ? 'Reopen the ticket before saving a new resolution.'
-      : (!ownedByMe ? `Only ${ticket.assignedTo || 'the assigned administrator'} can save a resolution.` : '');
+      : (!canEdit ? `Only ${ticket.assignedTo || 'the assigned administrator'} can save a resolution.` : '');
   }
   document.getElementById('adminTicketAiStatus').textContent = isClosed
     ? 'This ticket is closed. You can generate and copy assistance, but reopen it before saving a new resolution.'
-    : (!ownedByMe
+    : (!canEdit
       ? `${ticket.assignedTo ? `Handled by ${ticket.assignedTo}. ` : 'This ticket is unassigned. '}You may review assistance, but only the owner can save changes.`
-      : 'Generate reviewable assistance. Until the local AI Bridge is available, deterministic fallback guidance is used.');
+      : `${superAdmin && !ownedByMe ? 'Super Admin override is available. ' : ''}Generate reviewable assistance. Until the local AI Bridge is available, deterministic fallback guidance is used.`);
   loadAdminTicketHistory(ticket.id);
 }
 
@@ -304,7 +306,8 @@ function openTicketTransition(id, status) {
   const ticket = adminTicketState.tickets.find((item) => Number(item.id) === Number(id));
   const dialog = document.getElementById('ticketTransitionDialog');
   if (!ticket || !dialog) return;
-  if (Number(ticket.assignedToUserId) !== Number(window.currentUser?.id)) {
+  const superAdmin = String(window.currentUser?.role || '').toUpperCase() === 'SUPERADMIN';
+  if (!superAdmin && Number(ticket.assignedToUserId) !== Number(window.currentUser?.id)) {
     window.alert(ticket.assignedTo ? `This ticket is being handled by ${ticket.assignedTo}.` : 'Take this ticket before updating its status.');
     return;
   }
@@ -441,18 +444,19 @@ function actionMenu(ticket) {
   const ownedByMe = ownerId > 0 && ownerId === currentUserId;
   const unassigned = ownerId === 0;
   const superAdmin = String(window.currentUser?.role || '').toUpperCase() === 'SUPERADMIN';
+  const canEdit = ownedByMe || superAdmin;
   if (unassigned && current === 'open') actions.push(`<button type='button' onclick='claimTicket(${ticket.id})'>Take ticket</button>`);
-  if (ownedByMe) {
+  if (canEdit) {
     if (current !== 'open') actions.push(`<button type='button' onclick='openTicketTransition(${ticket.id}, "Open")'>Reopen ticket</button>`);
     if (!['resolved', 'closed'].includes(current)) actions.push(`<button type='button' onclick='openTicketTransition(${ticket.id}, "Resolved")'>Resolve ticket</button>`);
     if (current === 'resolved') actions.push(`<button type='button' onclick='openTicketTransition(${ticket.id}, "Closed")'>Close ticket</button>`);
-    if (!['resolved', 'closed'].includes(current)) actions.push(`<button type='button' onclick='openTicketAssignment(${ticket.id}, "release")'>Release ticket</button>`);
+    if (ownedByMe && !['resolved', 'closed'].includes(current)) actions.push(`<button type='button' onclick='openTicketAssignment(${ticket.id}, "release")'>Release ticket</button>`);
   }
   if (superAdmin && ownerId > 0 && !ownedByMe && !['resolved', 'closed'].includes(current)) {
     actions.push(`<button type='button' onclick='openTicketAssignment(${ticket.id}, "reassign")'>Reassign ticket</button>`);
   }
   const completedMessage = ['resolved', 'closed'].includes(current) && unassigned
-    ? `<span class='small'>Legacy ${statusLabel(ticket.status)} ticket · read-only</span>`
+    ? `<span class='small'>Legacy ${statusLabel(ticket.status)} ticket${superAdmin ? ' · Super Admin override available' : ' · read-only'}</span>`
     : '';
   const lockMessage = !unassigned && !ownedByMe
     ? `<span class='small'>Handled by ${escapeHtml(ticket.assignedTo || 'another administrator')}</span>`

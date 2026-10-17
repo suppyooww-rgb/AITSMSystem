@@ -56,4 +56,18 @@ class TicketTransitionNotesContractTest {
         assertTrue(script.contains("Handled by"))
         assertTrue(migration.contains("assigned_to_user_id INT REFERENCES users(id) ON DELETE SET NULL"))
     }
+
+    @Test fun `super admin can override ticket ownership while regular admins remain locked`() {
+        val service = Files.readString(Path.of("src/main/kotlin/backend/services/TicketService.kt"))
+        val repository = Files.readString(Path.of("src/main/kotlin/backend/repository/TicketRepository.kt"))
+        val routes = Files.readString(Path.of("src/main/kotlin/backend/routes/TicketRoutes.kt"))
+        val script = Files.readString(Path.of("src/main/resources/static/frontend/ticket-management/js/admin-ticket-management.js"))
+
+        assertTrue(service.contains("role != UserRole.SUPERADMIN"))
+        assertTrue(service.contains("ticket_superadmin_override"))
+        assertTrue(repository.contains("if (enforceOwner)"))
+        assertTrue(routes.contains("actorId, call.userRole()"))
+        assertTrue(script.contains("const canEdit = ownedByMe || superAdmin"))
+        assertTrue(script.contains("Super Admin override is available"))
+    }
 }

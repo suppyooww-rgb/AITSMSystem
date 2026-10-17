@@ -97,7 +97,7 @@ class FrontendSafetyContractTest {
         assertTrue(dashboardHtml.contains("id='adminOpsFeedStatus'"))
         assertTrue(dashboardHtml.contains("Older items remain available from the notification bell."))
         assertTrue(tickets.contains("View details"))
-        assertTrue(tickets.contains("Legacy \${statusLabel(ticket.status)} ticket · read-only"))
+        assertTrue(tickets.contains("Legacy \${statusLabel(ticket.status)} ticket"))
     }
 
     @Test fun `device surfaces are collector only and inventory details are click through`() {

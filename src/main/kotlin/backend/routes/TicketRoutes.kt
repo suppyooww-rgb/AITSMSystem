@@ -103,7 +103,7 @@ fun Route.ticketRoutes(ticketService: TicketService, slaAutomation: SlaAutomatio
             val req = call.receive<TicketResolutionUpdate>()
             val actorId = call.userId() ?: return@put call.respond(HttpStatusCode.Unauthorized)
             val actor = ticketService.actorDisplayName(actorId, call.userRole())
-            val ticket = ticketService.updateResolution(id, req.resolution, actor, actorId)
+            val ticket = ticketService.updateResolution(id, req.resolution, actor, actorId, call.userRole())
                 ?: return@put call.respond(HttpStatusCode.NotFound)
             call.respond(ticket)
         }
