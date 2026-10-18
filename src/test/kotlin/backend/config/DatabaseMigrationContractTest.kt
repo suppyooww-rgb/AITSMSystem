@@ -15,7 +15,7 @@ class DatabaseMigrationContractTest {
             files.filter { it.name.matches(Regex("V\\d+__.+\\.sql")) }.map { it.name }.sorted().toList()
         }
         assertEquals(actual, indexed)
-        assertTrue(indexed.last().startsWith("V019__"))
+        assertTrue(indexed.last().startsWith("V020__"))
     }
 
     @Test fun `deployment runs migrations before candidate health verification`() {
@@ -45,5 +45,6 @@ class DatabaseMigrationContractTest {
         assertTrue(workflow.contains("DB_MIGRATION_BASELINE=12"))
         assertTrue(Files.readString(Path.of("db/migrations/V018__repair_skipped_release_schema.sql")).contains("archived_at"))
         assertTrue(Files.readString(Path.of("db/migrations/V019__repair_legacy_collector_and_sla_schema.sql")).contains("agent_version"))
+        assertTrue(Files.readString(Path.of("db/migrations/V020__repair_legacy_collector_enrollment_schema.sql")).contains("collector_enrollment_codes"))
     }
 }
