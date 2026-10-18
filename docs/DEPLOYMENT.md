@@ -452,11 +452,27 @@ gcloud run services update-traffic $SERVICE `
 
 Application and database rollback are separate. If a migration is incompatible with the previous application, restore the verified backup or apply a reviewed forward-fix migration. Routing traffic to an older container does not reverse database changes.
 
+### Database recovery procedure
+
+Restoring a Cloud SQL backup replaces the selected target instance. Never restore into the live production instance until the incident lead has confirmed the target backup, outage window, and rollback decision. Prefer a temporary recovery instance for verification first.
+
+```powershell
+# Inspect the known-good backup before any recovery action.
+gcloud sql backups list --instance=$SQL_INSTANCE --limit=10
+
+# Restore only after explicitly selecting the production recovery target.
+# This is destructive to the target instance.
+gcloud sql backups restore BACKUP_ID --restore-instance=$RECOVERY_INSTANCE
+```
+
+After recovery, verify the expected databases, run the application health endpoint, test an administrator login, and record the backup ID, recovery time, and outcome in the release record. Do not move Cloud Run traffic until those checks pass.
+
 ## 18. Final approval checklist
 
 - GitHub security checks pass, including dependency and secret scans.
 - Cloud Build succeeds for the committed SHA.
 - Cloud SQL backups and point-in-time recovery are enabled.
+- The most recent on-demand backup is recorded and the database recovery procedure is available.
 - Migrations complete with `ON_ERROR_STOP=1`.
 - Cloud Run is healthy with the final HTTPS origin.
 - Admin and end-user smoke tests pass.
