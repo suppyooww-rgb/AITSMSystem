@@ -2,7 +2,10 @@ name: Security checks
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, beta]
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
