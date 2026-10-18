@@ -28,4 +28,15 @@ class DatabaseMigrationContractTest {
         assertTrue(workflow.indexOf("DB_MIGRATE_ON_START=true") < workflow.indexOf("CANDIDATE_URL"))
         assertTrue(workflow.contains("traffic was restored"))
     }
+
+    @Test fun `deployment removes legacy Gemini configuration before promotion`() {
+        val workflow = Files.readString(Path.of(".github/workflows/security.yml"))
+        assertTrue(workflow.contains("LEGACY_AI_ENV_VARS"))
+        assertTrue(workflow.contains("AI_PROVIDER"))
+        assertTrue(workflow.contains("GEMINI_MODEL"))
+        assertTrue(workflow.contains("GEMINI_API_KEY"))
+        assertTrue(workflow.contains("OLLAMA_MODEL=qwen3:8b"))
+        assertTrue(workflow.contains("LEGACY_AI_ENV_COUNT"))
+        assertTrue(workflow.indexOf("LEGACY_AI_ENV_COUNT") < workflow.indexOf("CANDIDATE_URL"))
+    }
 }
