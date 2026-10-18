@@ -15,7 +15,7 @@ class DatabaseMigrationContractTest {
             files.filter { it.name.matches(Regex("V\\d+__.+\\.sql")) }.map { it.name }.sorted().toList()
         }
         assertEquals(actual, indexed)
-        assertTrue(indexed.last().startsWith("V017__"))
+        assertTrue(indexed.last().startsWith("V018__"))
     }
 
     @Test fun `deployment runs migrations before candidate health verification`() {
@@ -38,5 +38,11 @@ class DatabaseMigrationContractTest {
         assertTrue(workflow.contains("OLLAMA_MODEL=qwen3:8b"))
         assertTrue(workflow.contains("LEGACY_AI_ENV_COUNT"))
         assertTrue(workflow.indexOf("LEGACY_AI_ENV_COUNT") < workflow.indexOf("CANDIDATE_URL"))
+    }
+
+    @Test fun `deployment baselines only the schema version known to be present in production`() {
+        val workflow = Files.readString(Path.of(".github/workflows/security.yml"))
+        assertTrue(workflow.contains("DB_MIGRATION_BASELINE=12"))
+        assertTrue(Files.readString(Path.of("db/migrations/V018__repair_skipped_release_schema.sql")).contains("archived_at"))
     }
 }

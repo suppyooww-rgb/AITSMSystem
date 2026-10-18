@@ -107,7 +107,7 @@ jobs:
             --image "${{ steps.image.outputs.uri }}" \
             --no-traffic \
             --tag candidate \
-            --update-env-vars "DB_MIGRATE_ON_START=true,DB_MIGRATION_BASELINE=16,NOTIFICATION_RETENTION_DAYS=$RETENTION_DAYS,COLLECTOR_INSTALLER_URL=$COLLECTOR_URL,COLLECTOR_INSTALLER_SHA256=$COLLECTOR_SHA256,OLLAMA_MODEL=qwen3:8b" \
+            --update-env-vars "DB_MIGRATE_ON_START=true,DB_MIGRATION_BASELINE=12,NOTIFICATION_RETENTION_DAYS=$RETENTION_DAYS,COLLECTOR_INSTALLER_URL=$COLLECTOR_URL,COLLECTOR_INSTALLER_SHA256=$COLLECTOR_SHA256,OLLAMA_MODEL=qwen3:8b" \
             "${LEGACY_AI_REMOVAL[@]}" \
             --labels "managed-by=github-actions,git-sha=$GITHUB_SHA" \
             --quiet
