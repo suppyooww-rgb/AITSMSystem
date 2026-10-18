@@ -71,13 +71,13 @@ class AIChatService(
         }
 
         if (!providerReply.ok) {
-            logger.warn("Hosted AI chat failed: {}", providerReply.errorMessage)
-            return fallbackResponse(cleanInput, cfg.provider, cfg.model, synchronized(history) { history.size }, "AI backend unavailable")
+            logger.info("Local AI fallback used: {}", providerReply.errorMessage)
+            return fallbackResponse(cleanInput, cfg.provider, cfg.model, synchronized(history) { history.size }, providerReply.errorMessage ?: "Local AI bridge unavailable")
         }
 
         val plainReply = normalizeProviderReply(providerReply.content)
         if (plainReply.isNullOrBlank()) {
-            logger.warn("Hosted AI returned empty or malformed content")
+            logger.warn("Local AI returned empty or malformed content")
             return fallbackResponse(cleanInput, cfg.provider, cfg.model, synchronized(history) { history.size }, "Malformed AI payload")
         }
 
@@ -89,7 +89,7 @@ class AIChatService(
         }
 
         return AIChatResponse(
-            source = "gemini",
+            source = cfg.provider,
             reachable = true,
             reply = plainReply,
             fallback = null,
@@ -105,11 +105,6 @@ class AIChatService(
         conversationStore.remove(ownerSessionKey)
         sessionLastSeen.remove(ownerSessionKey)
         conversationRepository.clearSession(userId, sessionId)
-    }
-
-    fun testConnection(): AIProviderResult {
-        val cfg = configService.snapshot()
-        return provider.testConnection(cfg.model, cfg.timeoutMillis)
     }
 
     fun createTicketDraft(input: AITicketDraftRequest): AITicketDraftResponse {
@@ -130,7 +125,7 @@ class AIChatService(
             source = "fallback",
             reachable = false,
             reply = null,
-            fallback = buildFallback(userInput),
+            fallback = buildFallback(userInput, error),
             conversationSize = conversationSize,
             provider = providerName,
             model = modelName,
@@ -138,20 +133,32 @@ class AIChatService(
         )
     }
 
-    private fun buildFallback(userInput: String): AIFallbackContent {
+    private fun buildFallback(userInput: String, error: String): AIFallbackContent {
         val summary = userInput.trim().take(180).ifBlank { "Unable to analyze issue due to provider connectivity." }
+        val timedOut = error.contains("did not respond in time", ignoreCase = true) ||
+            error.contains("expired before completion", ignoreCase = true)
+        val availabilityMessage = if (timedOut) {
+            "The company AI Bridge is online, but the local AI request did not finish in time. Please retry or continue with the guidance below."
+        } else {
+            "Company local AI is temporarily unavailable. You can continue with the guidance below or create a support ticket."
+        }
+        val likelyCause = if (timedOut) {
+            "The company AI model exceeded the response timeout"
+        } else {
+            "The company AI Bridge or configured model is not currently available"
+        }
         return AIFallbackContent(
-            message = "I’m currently unable to process a full diagnosis because the hosted AI service is unavailable. Please retry shortly.",
+            message = availabilityMessage,
             issueSummary = summary,
-            likelyCauses = listOf("AI backend connection is unavailable"),
+            likelyCauses = listOf(likelyCause),
             troubleshootingSteps = listOf(
-                "Retry after a short wait",
-                "If this persists, contact the AITSM administrator to check the hosted AI service"
+                "Continue with the deterministic troubleshooting checklist",
+                "Contact an AITSM administrator if local AI assistance is required"
             ),
-            escalationCriteria = listOf("Escalate if outage impacts production support workflows for more than 15 minutes"),
+            escalationCriteria = listOf("Escalate when the issue requires diagnosis beyond the available deterministic guidance"),
             suggestedPriority = "Medium",
-            ticketTitle = "AI backend unavailable for troubleshooting",
-            ticketDescription = "The hosted AI service could not be reached. Retry later or continue by creating a support ticket manually."
+            ticketTitle = "IT support request",
+            ticketDescription = "Company local AI could not complete the request. Continue with manual troubleshooting and technician review."
         )
     }
 

@@ -106,14 +106,17 @@ async function createTicket() {
     return;
   }
 
-  const res = await fetch('/api/tickets', { method: 'POST', headers: authHeaders(), body: JSON.stringify(body) });
-  const data = await res.json();
-  if (!res.ok) {
-    setCreateTicketMessage(data.error || 'Unable to create ticket', 'danger');
-    return;
+  try {
+    await window.aitsmReady;
+    const data = await window.aitsmFetchJson('/api/tickets', {
+      method: 'POST',
+      body: JSON.stringify(body)
+    });
+    setCreateTicketMessage(`Ticket #${data.id} created successfully. Redirecting...`, 'success');
+    location.href = '/tickets';
+  } catch (error) {
+    setCreateTicketMessage(error.message || 'Unable to create ticket', 'danger');
   }
-  setCreateTicketMessage(`Ticket #${data.id} created successfully. Redirecting...`, 'success');
-  location.href = '/tickets';
 }
 
 function formatSla(ticket) {
@@ -138,11 +141,13 @@ async function analyzeTicketWithAi() {
   if (body.description.length < 10) return setCreateTicketMessage('Add at least 10 description characters before AI analysis.', 'danger');
   button.disabled = true;
   host.classList.remove('hidden', 'text-danger');
-  host.textContent = 'Gemini is analyzing the ticket and matching published knowledge articles…';
+  host.textContent = 'Preparing ticket guidance and matching published knowledge articles…';
   try {
-    const response = await fetch('/api/ai/ticket-insights', { method: 'POST', headers: authHeaders(), body: JSON.stringify(body) });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || data.message || 'AI analysis unavailable');
+    await window.aitsmReady;
+    const data = await window.aitsmFetchJson('/api/ai/ticket-insights', {
+      method: 'POST',
+      body: JSON.stringify(body)
+    });
     renderTicketAiPreview(data);
   } catch (error) {
     host.textContent = error.message;
@@ -188,8 +193,8 @@ function renderTicketAiPreview(data) {
   subtitle.textContent = suggestion.advisory || 'Review and edit every suggestion before applying it.';
   headingText.append(titleText, subtitle);
   const source = document.createElement('span');
-  source.className = `badge ${data.source === 'gemini' ? 'resolved' : 'in-progress'}`;
-  source.textContent = data.source === 'gemini' ? 'Gemini' : 'Fallback';
+  source.className = `badge ${data.source === 'fallback' ? 'in-progress' : 'resolved'}`;
+  source.textContent = data.source === 'fallback' ? 'Deterministic fallback' : 'Local AI';
   heading.append(headingText, source);
 
   const fields = document.createElement('div');
@@ -269,12 +274,16 @@ function applyTicketAiSuggestions() {
 
 async function updateMyTicketStatus(id, status){
   closeAllRowMenus();
-  const res = await fetch(`/api/tickets/${id}/status`, {
-    method:'PUT', headers:authHeaders(), body: JSON.stringify({ status })
-  });
-  const data = await res.json();
-  if(!res.ok) return alert(data.error || 'Unable to update ticket status');
-  await loadTickets();
+  try {
+    await window.aitsmReady;
+    await window.aitsmFetchJson(`/api/tickets/${id}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status })
+    });
+    await loadTickets();
+  } catch (error) {
+    alert(error.message || 'Unable to update ticket status');
+  }
 }
 
 async function loadTickets() {

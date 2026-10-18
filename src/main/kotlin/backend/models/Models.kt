@@ -130,7 +130,13 @@ data class RegisterRequest(
 @Serializable data class AdminEligibilityRequest(val targetEmail: String)
 @Serializable data class AdminEligibilityResponse(val found: Boolean, val eligible: Boolean, val alreadyAdmin: Boolean, val targetUserId: Int? = null, val message: String)
 @Serializable data class AdminSensitiveVerifyRequest(val password: String)
-@Serializable data class AdminSensitiveVerifyResponse(val verified: Boolean, val verificationToken: String? = null, val expiresAt: String? = null, val message: String)
+@Serializable data class AdminSensitiveVerifyResponse(
+    val verified: Boolean,
+    val verificationToken: String? = null,
+    val reauthToken: String? = null,
+    val expiresAt: String? = null,
+    val message: String
+)
 @Serializable data class AdminGrantRequest(val targetEmail: String, val verificationToken: String)
 @Serializable data class AdminGrantResponse(val success: Boolean, val user: User? = null, val message: String)
 @Serializable data class UserActionResponse(val message: String, val user: User)
@@ -152,6 +158,7 @@ data class Ticket(
     val priority: String,
     val category: String,
     val status: TicketStatus,
+    val assignedToUserId: Int? = null,
     val assignedTo: String? = null,
     val reviewedResolution: String? = null,
     val resolutionUpdatedBy: String? = null,
@@ -177,9 +184,25 @@ data class Ticket(
 )
 
 @Serializable data class TicketRequest(val title: String, val description: String, val priority: String, val category: String, val deviceId: Int? = null)
-@Serializable data class TicketStatusUpdate(val status: String)
+@Serializable data class TicketStatusUpdate(
+    val status: String,
+    val note: String? = null,
+    val userMessage: String? = null,
+    val resolutionCategory: String? = null,
+    val notifyRequester: Boolean = true
+)
 @Serializable data class TicketResolutionUpdate(val resolution: String)
-@Serializable data class TicketHistoryEvent(val status: String, val updatedBy: String, val timestamp: String)
+@Serializable data class TicketAssignmentUpdate(val assigneeUserId: Int? = null, val note: String? = null)
+@Serializable data class TicketHistoryEvent(
+    val status: String,
+    val previousStatus: String? = null,
+    val note: String? = null,
+    val userMessage: String? = null,
+    val resolutionCategory: String? = null,
+    val notifyRequester: Boolean = false,
+    val updatedBy: String,
+    val timestamp: String
+)
 
 @Serializable
 data class Device(
@@ -209,12 +232,18 @@ data class HostTelemetryDto(
 )
 
 @Serializable data class CollectorEnrollmentRequest(val siteId: String, val name: String)
-@Serializable data class CollectorPackageRequest(val siteId: String = "self-device", val name: String = "Windows device", val scope: String = "SELF")
+@Serializable data class CollectorPackageRequest(
+    val siteId: String = "self-device",
+    val name: String = "Windows device",
+    val scope: String = "SELF",
+    val repairCollectorId: String? = null
+)
 @Serializable data class CollectorPackageResponse(
     val enrollmentCode: String, val expiresAt: String, val scope: String,
-    val environment: String = "production", val baseUrl: String = ""
+    val environment: String = "production", val baseUrl: String = "",
+    val repairCollectorId: String? = null
 )
-@Serializable data class CollectorInstallerDownloadRequest(val enrollmentCode: String)
+@Serializable data class CollectorInstallerDownloadRequest(val enrollmentCode: String, val repairCollectorId: String? = null)
 @Serializable data class CollectorRedeemRequest(val enrollmentCode: String)
 @Serializable data class CollectorRedeemResponse(
     val collectorId: String, val token: String, val scope: String, val privateCidrs: List<String>, val intervalSeconds: Int = 60
@@ -225,9 +254,13 @@ data class HostTelemetryDto(
 @Serializable data class CollectorView(
     val collectorId: String, val siteId: String, val name: String, val state: String,
     val enrolledAt: String, val lastSeenAt: String? = null, val revokedAt: String? = null,
+    val archivedAt: String? = null,
     val scope: String = "LAN", val ownerUserId: Int? = null, val statusReason: String? = null,
     val agentVersion: String? = null, val serviceStartedAt: String? = null,
-    val lastReportedError: String? = null, val consecutiveFailures: Int = 0
+    val lastReportedError: String? = null, val consecutiveFailures: Int = 0,
+    val aiBridgeEnabled: Boolean = false, val aiBridgeAvailable: Boolean = false,
+    val aiBridgeLastSeenAt: String? = null, val aiBridgeModel: String? = null,
+    val aiBridgeLastError: String? = null
 )
 @Serializable data class CollectorDeviceReport(
     val deviceKey: String, val hostname: String, val ipAddress: String, val macAddress: String? = null,
@@ -325,6 +358,15 @@ data class Notification(
     val isRead: Boolean = false,
     val createdAt: String,
     val readAt: String? = null
+)
+@Serializable
+data class NotificationPage(
+    val items: List<Notification>,
+    val page: Int,
+    val pageSize: Int,
+    val total: Long,
+    val totalPages: Int,
+    val hasNext: Boolean
 )
 @Serializable data class SLA(val id: Int, val priority: String, val responseTime: Int, val resolutionTime: Int)
 @Serializable data class SLAUpdateRequest(val responseTime: Int, val resolutionTime: Int)

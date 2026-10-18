@@ -81,6 +81,21 @@ Open `/security` to enroll or manage MFA, regenerate one-time recovery codes aft
 3. Review the summary and checklist.
 4. Edit the resolution draft before copying or using it. Generation never posts an update or changes ticket status automatically.
 
+### 3.8 Local AI Bridge
+
+The **Settings → Local AI Bridge** card lets administrators connect a company-managed Windows collector to Ollama:
+
+1. Download Ollama only from the official Windows link shown in Settings.
+2. Enter the exact model identifier reported by `ollama list`; the initial recommendation is `qwen3:8b`.
+3. Copy and run the displayed `ollama pull` command on the Windows computer intended for local AI.
+4. Do not expose Ollama port `11434` to the internet. Keep it bound to `127.0.0.1`.
+5. Install or repair collector version 1.3.0 or later with `LAN` scope.
+6. In the collector action menu, choose **Enable AI Bridge**, wait for **Online**, then select **Test AI Bridge**.
+
+The bridge requires no inbound internet access. It polls authenticated, short-lived jobs over HTTPS and calls Ollama only on localhost. End-user `SELF` collectors are not eligible to process AI jobs.
+
+SLA timers, breach handling, and deterministic risk scoring do not depend on Ollama and remain available while the AI Bridge is unavailable.
+
 ---
 
 ## 4. Practical Workflow (Recommended)
@@ -99,8 +114,9 @@ Open `/security` to enroll or manage MFA, regenerate one-time recovery codes aft
 - Reset password if needed.
 
 ### AI assistant shows fallback panel
-- The hosted Gemini AI service may be temporarily unavailable, rate limited, or timed out.
-- You can still create a ticket draft from fallback guidance.
+- Confirm a company/LAN collector version 1.3.0+ is online and has AI Bridge enabled.
+- Confirm Ollama is running and the configured model appears in `ollama list`.
+- You can still create a ticket draft from deterministic fallback guidance.
 
 ### No monitoring data
 - Confirm a collector is enrolled, running inside the target LAN, and allowed outbound HTTPS access.

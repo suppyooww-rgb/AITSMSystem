@@ -77,6 +77,7 @@ CREATE TABLE IF NOT EXISTS tickets (
   priority VARCHAR(20) NOT NULL,
   category VARCHAR(80) NOT NULL,
   status VARCHAR(30) NOT NULL,
+  assigned_to_user_id INT REFERENCES users(id) ON DELETE SET NULL,
   assigned_to VARCHAR(150),
   reviewed_resolution TEXT,
   resolution_updated_by VARCHAR(150),
@@ -98,10 +99,15 @@ CREATE TABLE IF NOT EXISTS tickets (
 );
 
 CREATE TABLE IF NOT EXISTS ticket_history (
-  id SERIAL PRIMARY KEY,
-  ticket_id INT REFERENCES tickets(id),
-  status VARCHAR(30) NOT NULL,
-  updated_by VARCHAR(150) NOT NULL,
+    id SERIAL PRIMARY KEY,
+    ticket_id INT REFERENCES tickets(id),
+    status VARCHAR(30) NOT NULL,
+    previous_status VARCHAR(30),
+    work_note TEXT,
+    user_message TEXT,
+    resolution_category VARCHAR(80),
+    notify_requester BOOLEAN NOT NULL DEFAULT FALSE,
+    updated_by VARCHAR(150) NOT NULL,
   timestamp TIMESTAMP NOT NULL
 );
 
@@ -143,7 +149,8 @@ CREATE TABLE IF NOT EXISTS monitoring_collectors (
   token_hash VARCHAR(64) NOT NULL UNIQUE,
   enrolled_at TIMESTAMP NOT NULL,
   last_seen_at TIMESTAMP,
-  revoked_at TIMESTAMP
+  revoked_at TIMESTAMP,
+  archived_at TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS monitoring_devices (

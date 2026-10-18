@@ -1,6 +1,7 @@
 package com.aitsm
 
 import backend.config.DatabaseFactory
+import backend.config.DatabaseMigrator
 import backend.config.Env
 import backend.config.ServiceContainer
 import backend.models.ApiErrorResponse
@@ -146,6 +147,7 @@ fun Application.module() {
         }
     }
 
+    if (Env.get("DB_MIGRATE_ON_START").equals("true", ignoreCase = true)) DatabaseMigrator.migrate()
     DatabaseFactory.init()
     val container = ServiceContainer(this)
     configureSecurityBoundary(container.sessionService)
@@ -153,6 +155,7 @@ fun Application.module() {
     container.aiChatService.startupLog()
     container.slaService.seedDefaults()
     container.slaAutomationService.start(this)
+    container.notificationService.startRetentionCleanup(this)
 
     val superAdminEmail = Env.get("SUPERADMIN_EMAIL")?.takeIf { it.isNotBlank() }
     val superAdminPassword = Env.get("SUPERADMIN_PASSWORD")?.takeIf { it.isNotBlank() }
@@ -195,6 +198,7 @@ fun Application.module() {
             "/settings" to "settings/html/settings.html",
             "/profile" to "profile/html/profile.html",
             "/security" to "security/html/security.html",
+            "/notifications" to "notifications/html/notifications.html",
             "/user-management" to "user-management/html/user-management.html",
             "/ai-assistant" to "ai-assistant/html/ai-assistant.html",
             "/colleagues" to "colleagues/html/colleagues.html"
@@ -239,7 +243,7 @@ fun Application.module() {
         inventoryRoutes(container.inventoryService, container.reauthenticationService)
         slaRoutes(container.slaService, container.ticketService, container.reauthenticationService)
         settingsRoutes(container.assetDetectionService, container.reauthenticationService)
-        aiRoutes(container.aiChatService, container.aiConfigService, container.ticketAiAdvisor, container.reauthenticationService)
+        aiRoutes(container.aiChatService, container.aiConfigService, container.ticketAiAdvisor, container.reauthenticationService, container.ollamaBridgeService)
         auditRoutes(container.auditRepo)
     }
 }
@@ -253,7 +257,7 @@ internal fun validateRuntimeConfiguration(appEnv: String, value: (String) -> Str
     val required = listOf(
         "DB_URL", "DB_USER", "DB_PASSWORD", "APP_BASE_URL", "COMPANY_NAME",
         "CORS_ALLOWED_ORIGINS", "MFA_ENCRYPTION_KEY", "SMTP_HOST", "SMTP_PORT",
-        "SMTP_USERNAME", "SMTP_PASSWORD", "SMTP_FROM", "SMTP_STARTTLS", "GEMINI_API_KEY"
+        "SMTP_USERNAME", "SMTP_PASSWORD", "SMTP_FROM", "SMTP_STARTTLS"
     )
     val missing = required.filter { value(it).isNullOrBlank() }
     require(missing.isEmpty()) { "Missing mandatory production configuration: ${missing.joinToString(", ")}" }
@@ -296,7 +300,6 @@ internal fun validateRuntimeConfiguration(appEnv: String, value: (String) -> Str
     }
     require((value("SMTP_PORT")?.toIntOrNull() ?: 0) in 1..65535) { "SMTP_PORT must be a valid TCP port" }
     require(value("SMTP_STARTTLS").equals("true", true)) { "SMTP_STARTTLS must be true in production" }
-    require((value("AI_PROVIDER") ?: "gemini").equals("gemini", true)) { "AI_PROVIDER must be gemini" }
     require((value("DEPLOYMENT_ENV") ?: "production").lowercase() in setOf("production", "beta")) {
         "DEPLOYMENT_ENV must be production or beta"
     }

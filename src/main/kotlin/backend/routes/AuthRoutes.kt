@@ -3,6 +3,7 @@ package backend.routes
 import backend.models.AdminEligibilityRequest
 import backend.models.AdminGrantRequest
 import backend.models.AdminSensitiveVerifyRequest
+import backend.models.AdminSensitiveVerifyResponse
 import backend.models.EmailApprovalRequest
 import backend.models.ExternalAccountApprovalRequest
 import backend.models.ChangeOwnPasswordRequest
@@ -258,8 +259,11 @@ fun Route.authRoutes(authService: AuthService, sessions: SessionService, invitat
             if (!call.requireReauthentication(reauthentication, ReauthScope.ADMIN_ACCESS)) return@put
             val id = call.parameters["id"]?.toIntOrNull() ?: return@put call.respond(HttpStatusCode.BadRequest)
             val req = call.receive<EmailApprovalRequest>()
-            val updated = authService.updateUserEmailApproval(id, req.approved, call.userId())
-            call.respond(UserActionResponse(if (req.approved) "User approved for login" else "User marked as pending", updated))
+            if (!req.approved) {
+                return@put call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Verified invitation accounts cannot be returned to pending status"))
+            }
+            val updated = authService.updateUserEmailApproval(id, true, call.userId())
+            call.respond(UserActionResponse("User approved for login", updated))
         }
         put("/{id}/access-approval") {
             if (!call.requireRole(UserRole.ADMIN)) return@put
@@ -287,10 +291,21 @@ fun Route.authRoutes(authService: AuthService, sessions: SessionService, invitat
                 val actor = call.userId() ?: return@post call.respond(HttpStatusCode.Unauthorized)
                 val req = call.receive<AdminSensitiveVerifyRequest>()
                 val (ok, token, meta) = authService.verifySensitiveAction(actor, req.password)
-                if (!ok) return@post call.respond(HttpStatusCode.Forbidden, mapOf("verified" to false, "message" to meta))
+                if (!ok) return@post call.respond(
+                    HttpStatusCode.Forbidden,
+                    AdminSensitiveVerifyResponse(verified = false, message = meta)
+                )
                 val principal = call.principal()!!
                 val reauth = reauthentication.issue(principal.sessionId, actor, ReauthScope.ADMIN_ACCESS)
-                call.respond(mapOf("verified" to true, "verificationToken" to token, "reauthToken" to reauth.token, "expiresAt" to meta, "message" to "Verification successful"))
+                call.respond(
+                    AdminSensitiveVerifyResponse(
+                        verified = true,
+                        verificationToken = token,
+                        reauthToken = reauth.token,
+                        expiresAt = meta,
+                        message = "Verification successful"
+                    )
+                )
             }
             post("/grant") {
                 if (!call.requireRole(UserRole.ADMIN)) return@post

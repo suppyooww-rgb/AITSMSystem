@@ -8,6 +8,7 @@ const userMgmtState = {
   }
 };
 let accessApprovalUserId = null;
+let passwordResetResolver = null;
 
 function openAccessApprovalModal(userId, email) {
   accessApprovalUserId = userId;
@@ -96,10 +97,9 @@ async function changeRoleFromUserManagement(userId, role) {
 }
 
 async function resetUserPasswordFromUserManagement(userId, email) {
-  const newPassword = prompt(`Set a temporary password for ${email}:`);
-  if (!newPassword) return;
-  const confirmPassword = prompt('Confirm the temporary password:');
-  if (confirmPassword == null) return;
+  const values = await requestTemporaryPassword(email);
+  if (!values) return;
+  const { newPassword, confirmPassword } = values;
 
   const reauthToken = await obtainReauthToken('admin-access');
   const res = await fetch(`/api/users/${userId}/reset-password`, {
@@ -143,6 +143,44 @@ async function setUserEmailApprovalFromUserManagement(userId, approved) {
   await loadUserManagement();
 }
 
+function finishTemporaryPassword(values) {
+  const modal = document.getElementById('passwordResetModal');
+  modal?.classList.replace('show', 'hidden');
+  const resolver = passwordResetResolver;
+  passwordResetResolver = null;
+  resolver?.(values);
+}
+
+function requestTemporaryPassword(email) {
+  if (passwordResetResolver) return Promise.reject(new Error('A password dialog is already open.'));
+  const modal = document.getElementById('passwordResetModal');
+  const form = document.getElementById('passwordResetForm');
+  form?.reset();
+  document.getElementById('passwordResetTarget').textContent = `Set a temporary password for ${email}.`;
+  document.getElementById('passwordResetMessage').classList.add('hidden');
+  modal.classList.replace('hidden', 'show');
+  window.setTimeout(() => document.getElementById('temporaryPassword')?.focus(), 0);
+  return new Promise((resolve) => { passwordResetResolver = resolve; });
+}
+
+function submitTemporaryPassword(event) {
+  event.preventDefault();
+  const newPassword = document.getElementById('temporaryPassword').value;
+  const confirmPassword = document.getElementById('temporaryPasswordConfirm').value;
+  const message = document.getElementById('passwordResetMessage');
+  if (newPassword.length < 12) {
+    message.textContent = 'Temporary passwords must contain at least 12 characters.';
+    message.classList.remove('hidden');
+    return;
+  }
+  if (newPassword !== confirmPassword) {
+    message.textContent = 'The passwords do not match.';
+    message.classList.remove('hidden');
+    return;
+  }
+  finishTemporaryPassword({ newPassword, confirmPassword });
+}
+
 async function resetAdministratorMfa(userId, email) {
   if (!confirm(`Reset MFA for ${email}? Every active session for that administrator will be revoked.`)) return;
   try {
@@ -156,7 +194,7 @@ async function resetAdministratorMfa(userId, email) {
 }
 
 async function openAddAdminFromUserManagement(targetEmail) {
-  const password = prompt(`Verify your password to grant admin role to ${targetEmail}:`);
+  const password = await requestReauthPassword();
   if (!password) return;
 
   const verifyRes = await fetch('/api/users/admin/verify', {
@@ -240,7 +278,9 @@ function renderUserManagementRows() {
       normalizeRole(u.role) === 'admin'
         ? `<button type='button' ${canChange ? '' : 'disabled'} onclick='changeRoleFromUserManagement(${u.id}, "END_USER")'>Set as end-user</button>`
         : `<button type='button' ${canChange ? '' : 'disabled'} onclick='openAddAdminFromUserManagement(decodeURIComponent("${encodedEmail}"))'>Grant admin role</button>`,
-      `<button type='button' ${canChange ? '' : 'disabled'} onclick='setUserEmailApprovalFromUserManagement(${u.id}, ${u.emailVerified ? 'false' : 'true'})'>${u.emailVerified ? 'Mark email as pending' : 'Approve email for login'}</button>`,
+      !u.emailVerified
+        ? `<button type='button' ${canChange ? '' : 'disabled'} onclick='setUserEmailApprovalFromUserManagement(${u.id}, true)'>Approve email for login</button>`
+        : '',
       `<button type='button' ${canChange ? '' : 'disabled'} onclick='resetUserPasswordFromUserManagement(${u.id}, decodeURIComponent("${encodedEmail}"))'>Reset password</button>`,
       currentRole() === 'superadmin' && ['admin', 'it-admin'].includes(normalizeRole(u.role))
         ? `<button type='button' ${canChange ? '' : 'disabled'} onclick='resetAdministratorMfa(${u.id}, decodeURIComponent("${encodedEmail}"))'>Reset administrator MFA</button>` : '',

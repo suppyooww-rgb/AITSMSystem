@@ -64,6 +64,81 @@
         </table>
       </div>
     </section>
+    <dialog id='ticketTransitionDialog' class='ticket-transition-dialog' aria-labelledby='ticketTransitionTitle'>
+      <form id='ticketTransitionForm' class='ticket-transition-form'>
+        <div class='card-head'>
+          <div>
+            <p class='page-kicker'>Audited status change</p>
+            <h3 id='ticketTransitionTitle' class='section-title'>Update ticket status</h3>
+            <p id='ticketTransitionMeta' class='section-subtitle'></p>
+          </div>
+          <button id='closeTicketTransitionBtn' class='btn btn-ghost icon-btn' type='button' aria-label='Close dialog'>×</button>
+        </div>
+        <input id='ticketTransitionId' type='hidden'>
+        <div class='form-group'>
+          <label for='ticketTransitionStatus'>New status</label>
+          <select id='ticketTransitionStatus' required>
+            <option value='Open'>Open</option>
+            <option value='In Progress'>In Progress</option>
+            <option value='Resolved'>Resolved</option>
+            <option value='Closed'>Closed</option>
+          </select>
+        </div>
+        <div class='form-group'>
+          <label for='ticketTransitionNote'>Internal work note *</label>
+          <textarea id='ticketTransitionNote' maxlength='4000' required placeholder='Describe the investigation, action taken, or reason for this status change.'></textarea>
+          <p class='small'>Required for the permanent administrator activity record. This note is not shown to the requester.</p>
+        </div>
+        <div id='ticketResolutionCategoryGroup' class='form-group hidden'>
+          <label for='ticketResolutionCategory'>Resolution category *</label>
+          <select id='ticketResolutionCategory'>
+            <option value=''>Select a category</option>
+            <option>Configuration Change</option><option>Software Fix</option><option>Hardware Repair</option>
+            <option>Access Restored</option><option>Network Fix</option><option>User Guidance</option>
+            <option>Workaround</option><option>No Fault Found</option><option>Other</option>
+          </select>
+        </div>
+        <div class='form-group'>
+          <label for='ticketRequesterMessage'>Requester-visible update <span id='ticketRequesterMessageRequired'></span></label>
+          <textarea id='ticketRequesterMessage' maxlength='4000' placeholder='Explain progress or the verified resolution in clear language for the requester.'></textarea>
+          <p class='small'>A requester-visible resolution is required when resolving a ticket.</p>
+        </div>
+        <label class='ticket-notify-option'><input id='ticketNotifyRequester' type='checkbox' checked> Notify the requester</label>
+        <p id='ticketTransitionError' class='small text-danger' aria-live='polite'></p>
+        <div class='inline-actions ticket-transition-actions'>
+          <button id='cancelTicketTransitionBtn' class='btn btn-ghost' type='button'>Cancel</button>
+          <button id='submitTicketTransitionBtn' class='btn btn-primary' type='submit'>Save status update</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id='ticketAssignmentDialog' class='ticket-transition-dialog' aria-labelledby='ticketAssignmentTitle'>
+      <form id='ticketAssignmentForm' class='ticket-transition-form'>
+        <div class='card-head'>
+          <div>
+            <p class='page-kicker'>Ownership control</p>
+            <h3 id='ticketAssignmentTitle' class='section-title'>Manage ticket ownership</h3>
+            <p id='ticketAssignmentMeta' class='section-subtitle'></p>
+          </div>
+          <button id='closeTicketAssignmentBtn' class='btn btn-ghost icon-btn' type='button' aria-label='Close dialog'>×</button>
+        </div>
+        <input id='ticketAssignmentId' type='hidden'>
+        <input id='ticketAssignmentMode' type='hidden'>
+        <div id='ticketAssigneeGroup' class='form-group hidden'>
+          <label for='ticketAssigneeUserId'>Assign to *</label>
+          <select id='ticketAssigneeUserId'></select>
+        </div>
+        <div class='form-group'>
+          <label for='ticketAssignmentNote'>Reason *</label>
+          <textarea id='ticketAssignmentNote' maxlength='4000' required placeholder='Explain why this ticket is being released or reassigned.'></textarea>
+          <p class='small'>This reason is kept in the permanent ticket activity record.</p>
+        </div>
+        <p id='ticketAssignmentError' class='small text-danger' aria-live='polite'></p>
+        <div class='inline-actions ticket-transition-actions'>
+          <button id='cancelTicketAssignmentBtn' class='btn btn-ghost' type='button'>Cancel</button>
+          <button id='submitTicketAssignmentBtn' class='btn btn-primary' type='submit'>Save ownership change</button>
+        </div>
+      </form>
+    </dialog>
     <section id='adminTicketAiPanel' class='card ai-ticket-assistance hidden' aria-live='polite'>
       <div class='card-head'>
         <div>
@@ -78,6 +153,10 @@
         <h4>Saved reviewed resolution</h4>
         <div id='adminTicketSavedResolutionText' class='ai-review-copy'></div>
         <p id='adminTicketSavedResolutionMeta' class='small'></p>
+      </section>
+      <section class='ticket-activity-section'>
+        <h4>Ticket activity</h4>
+        <div id='adminTicketActivity' class='ticket-activity-list'><p class='small'>Loading activity…</p></div>
       </section>
       <div id='adminTicketAiResults' class='ai-ticket-assistance-results hidden'>
         <section>
@@ -101,5 +180,5 @@
     </section>
   </main>
 </div>
-<script src='/modules/sidebar/js/admin-shell.js'></script><script src='/modules/common/js/app.js'></script><script src='/modules/common/js/help.js'></script><script src='/modules/common/js/table-skeleton.js'></script><script src='/ticket-management/js/admin-ticket-management.js'></script>
+<script src='/modules/sidebar/js/admin-shell.js'></script><script src='/modules/common/js/app.js'></script><script src='/modules/common/js/help.js'></script><script src='/modules/common/js/table-skeleton.js'></script><script src='/ticket-management/js/admin-ticket-management.js?v=owned-active-ai-v1'></script>
 </body></html>

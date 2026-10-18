@@ -23,6 +23,10 @@ class TicketService(
     private val followUpThresholdHours = 24L
     private val allowedPriorities = setOf("Critical", "High", "Medium", "Low")
     private val allowedCategories = setOf("Hardware", "Software", "Network", "Database", "Security", "Other")
+    private val resolutionCategories = setOf(
+        "Configuration Change", "Software Fix", "Hardware Repair", "Access Restored",
+        "Network Fix", "User Guidance", "Workaround", "No Fault Found", "Other"
+    )
 
     fun create(userId: Int, req: TicketRequest): Ticket {
         val normalized = normalizeTicketRequest(req)
@@ -43,13 +47,18 @@ class TicketService(
     }
     fun get(id: Int): Ticket? = repository.get(id)?.let { enrichRisk(listOf(it)).first() }
     fun history(id: Int) = repository.history(id)
+    fun actorDisplayName(userId: Int, role: UserRole): String =
+        users.findById(userId)?.let { "${it.fullName} (${role.asHeaderValue()})" } ?: "${role.asHeaderValue()}-$userId"
     fun allForAdvisory() = enrichRisk(repository.list(null, true, 500, 0).items)
 
-    fun update(id: Int, req: TicketRequest, userId: Int?): Ticket? {
+    fun update(id: Int, req: TicketRequest, userId: Int?, role: UserRole): Ticket? {
         val existing = repository.get(id) ?: return null
+        val admin = Permission.TICKET_MANAGE in PermissionMatrix.permissions(role)
+        val enforceOwner = admin && role != UserRole.SUPERADMIN
+        if (enforceOwner) requireTicketOwner(existing, userId)
         val normalized = normalizeTicketRequest(req)
         validateTicketRequest(normalized)
-        return repository.update(id, normalized).also { updated ->
+        return repository.update(id, normalized, userId, enforceOwner = enforceOwner).also { updated ->
             audit.log(userId, "Updated ticket #$id", "tickets")
             if (updated != null && userId != updated.userId) {
                 val priorityChanged = existing.priority != updated.priority
@@ -62,20 +71,47 @@ class TicketService(
                     occurrenceKey = updated.updatedAt
                 )
             }
+            if (updated != null && role == UserRole.SUPERADMIN && existing.assignedToUserId != userId) {
+                notifySuperAdminOverride(updated, actorDisplayName(userId ?: 0, role), "edited ticket details")
+            }
         }
     }
 
-    fun updateStatus(id: Int, statusValue: String, actor: String, userId: Int?, role: UserRole): Ticket? {
+    fun updateStatus(
+        id: Int,
+        statusValue: String,
+        actor: String,
+        userId: Int?,
+        role: UserRole,
+        noteValue: String? = null,
+        userMessageValue: String? = null,
+        resolutionCategoryValue: String? = null,
+        notifyRequester: Boolean = true
+    ): Ticket? {
         val existing = repository.get(id) ?: return null
         val requestedAction = statusValue.trim().lowercase()
         val status = parseStatus(statusValue)
         val admin = Permission.TICKET_MANAGE in PermissionMatrix.permissions(role)
         if (existing.status == status) return existing
+        val note = noteValue?.trim()?.takeIf { it.isNotBlank() }
+        val userMessage = userMessageValue?.trim()?.takeIf { it.isNotBlank() }
+        val resolutionCategory = resolutionCategoryValue?.trim()?.takeIf { it.isNotBlank() }
 
         when {
             admin -> {
+                if (role != UserRole.SUPERADMIN) requireTicketOwner(existing, userId)
                 require(status in setOf(TicketStatus.OPEN, TicketStatus.PENDING, TicketStatus.RESOLVED, TicketStatus.CLOSED)) { "Unsupported status for admin" }
                 require(requestedAction !in setOf("cancelled", "canceled", "cancel")) { "Admin cannot cancel tickets" }
+                require(note != null && note.length >= 5) { "A work note of at least 5 characters is required for every administrator status change" }
+                require(note.length <= 4_000) { "Work note must not exceed 4,000 characters" }
+                require(userMessage == null || userMessage.length <= 4_000) { "Requester message must not exceed 4,000 characters" }
+                if (status == TicketStatus.RESOLVED) {
+                    require(userMessage != null && userMessage.length >= 10) { "A requester-visible resolution of at least 10 characters is required" }
+                    require(resolutionCategory in resolutionCategories) { "Select a valid resolution category" }
+                }
+                if (status == TicketStatus.CLOSED) {
+                    require(existing.status == TicketStatus.RESOLVED) { "Resolve the ticket before closing it" }
+                }
             }
             else -> {
                 require(existing.userId == (userId ?: -1)) { "You can only modify your own tickets" }
@@ -102,36 +138,61 @@ class TicketService(
             }
         }
 
-        return repository.updateStatus(id, status.name, actor, recordFirstResponse = admin)?.let { enrichRisk(listOf(it)).first() }?.also { updated ->
-            audit.log(userId, "Changed ticket #$id to ${status.name}", "tickets")
+        val recordedNote = note ?: when {
+            requestedAction in setOf("cancelled", "canceled", "cancel") -> "Requester cancelled the ticket"
+            status == TicketStatus.CLOSED -> "Requester confirmed the resolution and closed the ticket"
+            else -> "Requester requested follow-up"
+        }
+        return repository.updateStatus(
+            id = id,
+            newStatus = status.name,
+            updatedBy = actor,
+            workNote = recordedNote,
+            userMessageValue = userMessage,
+            resolutionCategoryValue = resolutionCategory,
+            notifyRequesterValue = admin && notifyRequester,
+            recordFirstResponse = admin,
+            expectedAssigneeUserId = userId,
+            enforceOwner = admin && role != UserRole.SUPERADMIN
+        )?.let { enrichRisk(listOf(it)).first() }?.also { updated ->
+            audit.log(userId, "Changed ticket #$id from ${existing.status.name} to ${status.name} with a recorded work note", "tickets")
             if (admin) {
                 val displayStatus = status.name.lowercase().replace('_', ' ').replaceFirstChar { it.titlecase() }
-                notifications.pushOncePerTicketEvent(
-                    userId = updated.userId,
-                    eventType = "ticket_status_updated_${status.name.lowercase()}",
-                    ticketId = updated.id,
-                    title = "Ticket Status Updated",
-                    message = "Ticket #${updated.id} updated to $displayStatus",
-                    occurrenceKey = updated.updatedAt
-                )
+                if (notifyRequester) {
+                    notifications.pushOncePerTicketEvent(
+                        userId = updated.userId,
+                        eventType = "ticket_status_updated_${status.name.lowercase()}",
+                        ticketId = updated.id,
+                        title = "Ticket Status Updated",
+                        message = userMessage ?: "Ticket #${updated.id} updated to $displayStatus",
+                        occurrenceKey = updated.updatedAt
+                    )
+                }
                 if (existing.slaFirstResponseAt == null && updated.slaResponseState == "BREACHED") {
                     notifySlaBreach(updated, "response")
                 }
                 if (existing.slaResolvedAt == null && status in setOf(TicketStatus.RESOLVED, TicketStatus.CLOSED) && updated.slaResolutionState == "BREACHED") {
                     notifySlaBreach(updated, "resolution")
                 }
+                if (role == UserRole.SUPERADMIN && existing.assignedToUserId != userId) {
+                    notifySuperAdminOverride(updated, actor, "changed status to $displayStatus")
+                }
             }
         }
     }
 
-    fun updateResolution(id: Int, resolutionValue: String, actor: String, userId: Int?): Ticket? {
+    fun updateResolution(id: Int, resolutionValue: String, actor: String, userId: Int?, role: UserRole): Ticket? {
         val existing = repository.get(id) ?: return null
-        require(existing.status != TicketStatus.CLOSED) { "Closed tickets cannot accept a new resolution draft" }
+        if (role != UserRole.SUPERADMIN) requireTicketOwner(existing, userId)
+        require(existing.status !in setOf(TicketStatus.RESOLVED, TicketStatus.CLOSED)) { "Resolved or closed tickets cannot accept a new resolution draft" }
         val resolution = resolutionValue.trim()
         require(resolution.isNotBlank()) { "Resolution is required" }
         require(resolution.length <= 10_000) { "Resolution must not exceed 10,000 characters" }
 
-        return repository.updateResolution(id, resolution, actor)?.also { updated ->
+        return repository.updateResolution(
+            id, resolution, actor, userId,
+            enforceOwner = role != UserRole.SUPERADMIN
+        )?.also { updated ->
             audit.log(userId, "Saved reviewed resolution for ticket #$id", "tickets")
             notifications.pushOncePerTicketEvent(
                 userId = updated.userId,
@@ -141,7 +202,94 @@ class TicketService(
                 message = "A reviewed resolution was saved for ticket #${updated.id}",
                 occurrenceKey = updated.resolutionUpdatedAt ?: updated.updatedAt
             )
+            if (role == UserRole.SUPERADMIN && existing.assignedToUserId != userId) {
+                notifySuperAdminOverride(updated, actor, "saved a reviewed resolution")
+            }
         }
+    }
+
+    fun claim(id: Int, actorId: Int, role: UserRole): Ticket? {
+        require(Permission.TICKET_MANAGE in PermissionMatrix.permissions(role)) { "Ticket management permission is required" }
+        val actor = actorDisplayName(actorId, role)
+        val existing = repository.get(id) ?: return null
+        require(existing.status == TicketStatus.OPEN) { "Only an open ticket can be taken" }
+        val updated = repository.claim(id, actorId, actor) ?: return null
+        audit.log(actorId, "Claimed ticket #$id", "tickets")
+        notifyAdminsOncePerTicket(
+            eventType = "ticket_assigned",
+            ticketId = id,
+            title = "Ticket Being Handled",
+            message = "Ticket #$id is being handled by $actor",
+            occurrenceKey = updated.updatedAt
+        )
+        notifications.pushOncePerTicketEvent(
+            userId = updated.userId,
+            eventType = "ticket_assigned_requester",
+            ticketId = id,
+            title = "Ticket Assigned",
+            message = "Ticket #$id is now being handled by $actor",
+            occurrenceKey = updated.updatedAt
+        )
+        return enrichRisk(listOf(updated)).first()
+    }
+
+    fun release(id: Int, actorId: Int, role: UserRole, noteValue: String?): Ticket? {
+        require(Permission.TICKET_MANAGE in PermissionMatrix.permissions(role)) { "Ticket management permission is required" }
+        val existing = repository.get(id) ?: return null
+        requireTicketOwner(existing, actorId)
+        require(existing.status !in setOf(TicketStatus.RESOLVED, TicketStatus.CLOSED)) { "Resolved or closed tickets cannot be released" }
+        val note = noteValue?.trim().orEmpty()
+        require(note.length >= 5) { "A release note of at least 5 characters is required" }
+        require(note.length <= 4_000) { "Release note must not exceed 4,000 characters" }
+        val actor = actorDisplayName(actorId, role)
+        val updated = repository.release(id, actorId, actor, note) ?: return null
+        audit.log(actorId, "Released ticket #$id back to the queue", "tickets")
+        notifyAdminsOncePerTicket(
+            eventType = "ticket_released",
+            ticketId = id,
+            title = "Ticket Returned to Queue",
+            message = "Ticket #$id was released by $actor and is available",
+            occurrenceKey = updated.updatedAt
+        )
+        return enrichRisk(listOf(updated)).first()
+    }
+
+    fun reassign(id: Int, targetUserId: Int, actorId: Int, role: UserRole, noteValue: String?): Ticket? {
+        require(role == UserRole.SUPERADMIN) { "Only a Super Admin can reassign an owned ticket" }
+        val existing = repository.get(id) ?: return null
+        require(existing.status !in setOf(TicketStatus.RESOLVED, TicketStatus.CLOSED)) { "Resolved or closed tickets cannot be reassigned" }
+        val target = users.findById(targetUserId) ?: throw IllegalArgumentException("Selected assignee was not found")
+        require(Permission.TICKET_MANAGE in PermissionMatrix.permissions(target.role)) { "Selected user cannot manage tickets" }
+        val note = noteValue?.trim().orEmpty()
+        require(note.length >= 5) { "A reassignment note of at least 5 characters is required" }
+        require(note.length <= 4_000) { "Reassignment note must not exceed 4,000 characters" }
+        val actor = actorDisplayName(actorId, role)
+        val targetName = "${target.fullName} (${target.role.asHeaderValue()})"
+        val updated = repository.reassign(id, target.id, targetName, actor, note) ?: return null
+        audit.log(actorId, "Reassigned ticket #$id to ${target.fullName}", "tickets")
+        notifyAdminsOncePerTicket(
+            eventType = "ticket_reassigned",
+            ticketId = id,
+            title = "Ticket Reassigned",
+            message = "Ticket #$id was assigned to $targetName by $actor",
+            occurrenceKey = updated.updatedAt
+        )
+        return enrichRisk(listOf(updated)).first()
+    }
+
+    private fun requireTicketOwner(ticket: Ticket, actorId: Int?) {
+        require(ticket.assignedToUserId != null) { "Take this ticket before editing it" }
+        require(ticket.assignedToUserId == actorId) { "This ticket is being handled by ${ticket.assignedTo ?: "another administrator"}" }
+    }
+
+    private fun notifySuperAdminOverride(ticket: Ticket, actor: String, action: String) {
+        notifyAdminsOncePerTicket(
+            eventType = "ticket_superadmin_override",
+            ticketId = ticket.id,
+            title = "Super Admin Ticket Override",
+            message = "$actor $action on ticket #${ticket.id}",
+            occurrenceKey = ticket.updatedAt
+        )
     }
 
     private fun parseStatus(raw: String): TicketStatus {
@@ -175,7 +323,8 @@ class TicketService(
         eventType: String,
         ticketId: Int,
         title: String,
-        message: String
+        message: String,
+        occurrenceKey: String = eventType
     ) {
         val adminIds = users.listUsers()
             .filter { it.role in setOf(UserRole.ADMIN, UserRole.IT_ADMIN, UserRole.SUPERADMIN) }
@@ -187,7 +336,8 @@ class TicketService(
                 eventType = eventType,
                 ticketId = ticketId,
                 title = title,
-                message = message
+                message = message,
+                occurrenceKey = occurrenceKey
             )
         }
     }

@@ -19,6 +19,7 @@ import backend.services.CollectorRateLimitException
 import backend.services.InventoryService
 import backend.services.InvalidCollectorTokenException
 import backend.services.MonitoringService
+import backend.services.CollectorInstallerProvider
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -78,12 +79,18 @@ fun Route.monitoringRoutes(
             if (!service.canDownloadPackage(request.enrollmentCode, actorId)) {
                 return@post call.respond(HttpStatusCode.Forbidden, ApiErrorResponse(403, "Enrollment package is unavailable"))
             }
-            val executable = Thread.currentThread().contextClassLoader.getResourceAsStream("collector/AITSMCollectorSetup.exe")
-                ?: return@post call.respond(HttpStatusCode.ServiceUnavailable, ApiErrorResponse(503, "Windows collector installer is not included in this release"))
+            if (request.repairCollectorId != null && !service.canRepairCollector(request.repairCollectorId, actorId, call.userRole())) {
+                return@post call.respond(HttpStatusCode.Forbidden, ApiErrorResponse(403, "Collector repair target is unavailable"))
+            }
+            val executable = runCatching { CollectorInstallerProvider.openStream() }.getOrElse {
+                call.application.environment.log.error("Collector installer is unavailable", it)
+                return@post call.respond(HttpStatusCode.ServiceUnavailable, ApiErrorResponse(503, "Windows collector installer is temporarily unavailable"))
+            }
             val origin = Env.get("APP_BASE_URL")?.trim()?.removeSuffix("/")
                 ?: return@post call.respond(HttpStatusCode.ServiceUnavailable, ApiErrorResponse(503, "Application base URL is not configured"))
             val encodedOrigin = Base64.getUrlEncoder().withoutPadding().encodeToString(origin.toByteArray(Charsets.UTF_8))
-            val filename = "AITSMCollectorSetup--$encodedOrigin--${request.enrollmentCode}.exe"
+            val repairTarget = request.repairCollectorId ?: "new"
+            val filename = "AITSMCollectorSetup--$encodedOrigin--${request.enrollmentCode}--$repairTarget.exe"
             call.response.headers.append(HttpHeaders.ContentDisposition, "attachment; filename=\"$filename\"")
             call.respondOutputStream(ContentType.Application.OctetStream) {
                 executable.use { it.copyTo(this) }
@@ -122,6 +129,14 @@ fun Route.monitoringRoutes(
             val id = call.parameters["id"] ?: return@delete call.respond(HttpStatusCode.BadRequest, ApiErrorResponse(400, "Collector id is required"))
             if (!runCatching { service.revoke(id) }.getOrDefault(false)) return@delete call.respond(HttpStatusCode.NotFound, ApiErrorResponse(404, "Collector not found"))
             call.respond(mapOf("revoked" to true))
+        }
+        delete("/collectors/{id}/archive") {
+            if (!call.requireRole(UserRole.ADMIN)) return@delete
+            val id = call.parameters["id"] ?: return@delete call.respond(HttpStatusCode.BadRequest, ApiErrorResponse(400, "Collector id is required"))
+            if (!runCatching { service.archive(id) }.getOrDefault(false)) {
+                return@delete call.respond(HttpStatusCode.Conflict, ApiErrorResponse(409, "Revoke the collector before removing it from the active list"))
+            }
+            call.respond(mapOf("archived" to true))
         }
         delete("/my-collectors/{id}") {
             if (!call.requireAuthenticated()) return@delete

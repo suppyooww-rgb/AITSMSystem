@@ -80,7 +80,19 @@
     </section>
 
     <div id='accessApprovalModal' class='modal-overlay hidden'><div class='modal-card'><div class='card-head'><div><h3 class='section-title'>Grant Account Access</h3><p id='accessApprovalTarget' class='section-subtitle'></p></div></div><div class='form-grid single-col'><div class='form-group'><label for='accessApprovalDepartment'>Department</label><select id='accessApprovalDepartment'><option value=''>Select department</option><option>Finance</option><option>HR</option><option>IT</option><option>Operations</option><option>Sales</option><option>Support</option><option>Security</option><option>Management</option></select></div><div class='form-group'><label for='accessApprovalRole'>Access level</label><select id='accessApprovalRole'><option value='END_USER'>End-user</option><option value='ADMIN'>Admin</option></select></div></div><div class='inline-actions' style='justify-content:flex-end'><button class='btn btn-ghost' type='button' onclick='closeAccessApprovalModal()'>Cancel</button><button class='btn btn-primary' type='button' onclick='submitAccessApproval()'>Grant access</button></div></div></div>
+
+    <div id='passwordResetModal' class='modal-overlay hidden'>
+      <section class='modal-card' role='dialog' aria-modal='true' aria-labelledby='passwordResetTitle'>
+        <div class='card-head'><div><h3 id='passwordResetTitle' class='section-title'>Reset password</h3><p id='passwordResetTarget' class='section-subtitle'></p></div></div>
+        <form id='passwordResetForm' class='form-grid single-col' onsubmit='submitTemporaryPassword(event)'>
+          <div class='form-group'><label for='temporaryPassword'>Temporary password</label><input id='temporaryPassword' type='password' minlength='12' autocomplete='new-password' required></div>
+          <div class='form-group'><label for='temporaryPasswordConfirm'>Confirm temporary password</label><input id='temporaryPasswordConfirm' type='password' minlength='12' autocomplete='new-password' required></div>
+          <p id='passwordResetMessage' class='small text-danger hidden' role='alert'></p>
+          <div class='inline-actions' style='justify-content:flex-end'><button class='btn btn-ghost' type='button' onclick='finishTemporaryPassword(null)'>Cancel</button><button class='btn btn-primary' type='submit'>Reset password</button></div>
+        </form>
+      </section>
+    </div>
   </main>
 </div>
-<script src='/modules/sidebar/js/admin-shell.js'></script><script src='/modules/common/js/app.js'></script><script src='/modules/common/js/table-skeleton.js'></script><script src='/user-management/js/user-management.js?v=invitation-submit-v2'></script>
+<script src='/modules/sidebar/js/admin-shell.js'></script><script src='/modules/common/js/app.js'></script><script src='/modules/common/js/table-skeleton.js'></script><script src='/user-management/js/user-management.js?v=secure-admin-actions-v1'></script>
 </body></html>

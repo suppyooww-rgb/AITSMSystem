@@ -10,7 +10,7 @@ Commands are written for PowerShell and must be run from the repository root. Re
 2. Install the current [Google Cloud CLI](https://cloud.google.com/sdk/docs/install).
 3. Install PostgreSQL command-line tools so `psql` is available.
 4. Download the current [Cloud SQL Auth Proxy for Windows](https://cloud.google.com/sql/docs/postgres/connect-auth-proxy) as `cloud-sql-proxy.exe`.
-5. Prepare a verified SMTP sender, SMTP credentials, Gemini API key, strong initial super-admin password, and an NVD API key for GitHub Actions.
+5. Prepare a verified SMTP sender, SMTP credentials, strong initial super-admin password, and an NVD API key for GitHub Actions.
 
 Use one region for Cloud Run, Artifact Registry, Cloud SQL, and the uploads bucket. `asia-southeast1` (Singapore) is a reasonable starting point for the Philippines, but confirm availability and cost for your organization.
 
@@ -182,6 +182,18 @@ psql -h 127.0.0.1 -p 5433 -U $DB_MIGRATOR_USER -d $DB_NAME -v ON_ERROR_STOP=1 -f
 psql -h 127.0.0.1 -p 5433 -U $DB_MIGRATOR_USER -d $DB_NAME -v ON_ERROR_STOP=1 -f "db/migrations/V003__reconcile_verified_account_state.sql"
 psql -h 127.0.0.1 -p 5433 -U $DB_MIGRATOR_USER -d $DB_NAME -v ON_ERROR_STOP=1 -f "db/migrations/V004__transaction_notification_idempotency.sql"
 psql -h 127.0.0.1 -p 5433 -U $DB_MIGRATOR_USER -d $DB_NAME -v ON_ERROR_STOP=1 -f "db/migrations/V005__collector_monitoring.sql"
+psql -h 127.0.0.1 -p 5433 -U $DB_MIGRATOR_USER -d $DB_NAME -v ON_ERROR_STOP=1 -f "db/migrations/V006__backfill_colleague_notification_actors.sql"
+psql -h 127.0.0.1 -p 5433 -U $DB_MIGRATOR_USER -d $DB_NAME -v ON_ERROR_STOP=1 -f "db/migrations/V007__reviewed_ticket_resolutions.sql"
+psql -h 127.0.0.1 -p 5433 -U $DB_MIGRATOR_USER -d $DB_NAME -v ON_ERROR_STOP=1 -f "db/migrations/V008__collector_self_service_enrollment.sql"
+psql -h 127.0.0.1 -p 5433 -U $DB_MIGRATOR_USER -d $DB_NAME -v ON_ERROR_STOP=1 -f "db/migrations/V009__collector_diagnostics_and_device_identity.sql"
+psql -h 127.0.0.1 -p 5433 -U $DB_MIGRATOR_USER -d $DB_NAME -v ON_ERROR_STOP=1 -f "db/migrations/V010__sla_lifecycle_and_prediction.sql"
+psql -h 127.0.0.1 -p 5433 -U $DB_MIGRATOR_USER -d $DB_NAME -v ON_ERROR_STOP=1 -f "db/migrations/V011__canonical_devices_and_address_history.sql"
+psql -h 127.0.0.1 -p 5433 -U $DB_MIGRATOR_USER -d $DB_NAME -v ON_ERROR_STOP=1 -f "db/migrations/V012__merge_stale_adapter_identity_into_uuid_device.sql"
+psql -h 127.0.0.1 -p 5433 -U $DB_MIGRATOR_USER -d $DB_NAME -v ON_ERROR_STOP=1 -f "db/migrations/V013__archive_revoked_collectors.sql"
+psql -h 127.0.0.1 -p 5433 -U $DB_MIGRATOR_USER -d $DB_NAME -v ON_ERROR_STOP=1 -f "db/migrations/V014__secure_ollama_ai_bridge.sql"
+psql -h 127.0.0.1 -p 5433 -U $DB_MIGRATOR_USER -d $DB_NAME -v ON_ERROR_STOP=1 -f "db/migrations/V015__ticket_transition_notes.sql"
+psql -h 127.0.0.1 -p 5433 -U $DB_MIGRATOR_USER -d $DB_NAME -v ON_ERROR_STOP=1 -f "db/migrations/V016__atomic_ticket_ownership.sql"
+psql -h 127.0.0.1 -p 5433 -U $DB_MIGRATOR_USER -d $DB_NAME -v ON_ERROR_STOP=1 -f "db/migrations/V017__notification_history_pagination.sql"
 Remove-Item Env:PGPASSWORD
 ```
 
@@ -211,7 +223,6 @@ In **Google Cloud Console → Security → Secret Manager**, create these secret
 | --- | --- |
 | `aitsm-db-password` | password for `$DB_RUNTIME_USER` |
 | `aitsm-mfa-key` | base64-encoded 32-byte key |
-| `aitsm-gemini-key` | Gemini API key |
 | `aitsm-smtp-username` | SMTP username |
 | `aitsm-smtp-password` | SMTP password/API key |
 | `aitsm-superadmin-password` | temporary initial admin password of at least 16 characters |
@@ -232,7 +243,6 @@ Grant access only to the runtime identity:
 $secretNames = @(
   "aitsm-db-password",
   "aitsm-mfa-key",
-  "aitsm-gemini-key",
   "aitsm-smtp-username",
   "aitsm-smtp-password",
   "aitsm-superadmin-password"
@@ -299,8 +309,8 @@ gcloud run deploy $SERVICE `
   --timeout=300 `
   --min-instances=1 `
   --max-instances=5 `
-  --set-env-vars="APP_ENV=production,DB_URL=$DB_URL,DB_USER=$DB_RUNTIME_USER,APP_BASE_URL=$PLACEHOLDER_ORIGIN,CORS_ALLOWED_ORIGINS=$PLACEHOLDER_ORIGIN,COMPANY_NAME=$COMPANY_NAME,AI_PROVIDER=gemini,GEMINI_MODEL=gemini-3.8-flash,SMTP_HOST=smtp-relay.brevo.com,SMTP_PORT=587,SMTP_FROM=$SMTP_FROM,SMTP_FROM_NAME=AITSM No Reply,SMTP_STARTTLS=true,AUTH_EXPOSE_DEV_VERIFICATION_CODE=false,PROFILE_UPLOAD_DIR=/app/uploads/profile-photos,BOOTSTRAP_SUPERADMIN=true,SUPERADMIN_EMAIL=$SUPERADMIN_EMAIL,SUPERADMIN_NAME=System Super Admin,SUPERADMIN_COMPANY=$COMPANY_NAME,SUPERADMIN_DEPARTMENT=Platform" `
-  --set-secrets="DB_PASSWORD=aitsm-db-password:1,MFA_ENCRYPTION_KEY=aitsm-mfa-key:1,GEMINI_API_KEY=aitsm-gemini-key:1,SMTP_USERNAME=aitsm-smtp-username:1,SMTP_PASSWORD=aitsm-smtp-password:1,SUPERADMIN_PASSWORD=aitsm-superadmin-password:1" `
+  --set-env-vars="APP_ENV=production,DB_URL=$DB_URL,DB_USER=$DB_RUNTIME_USER,APP_BASE_URL=$PLACEHOLDER_ORIGIN,CORS_ALLOWED_ORIGINS=$PLACEHOLDER_ORIGIN,COMPANY_NAME=$COMPANY_NAME,OLLAMA_MODEL=qwen3:8b,SMTP_HOST=smtp-relay.brevo.com,SMTP_PORT=587,SMTP_FROM=$SMTP_FROM,SMTP_FROM_NAME=AITSM No Reply,SMTP_STARTTLS=true,AUTH_EXPOSE_DEV_VERIFICATION_CODE=false,PROFILE_UPLOAD_DIR=/app/uploads/profile-photos,BOOTSTRAP_SUPERADMIN=true,SUPERADMIN_EMAIL=$SUPERADMIN_EMAIL,SUPERADMIN_NAME=System Super Admin,SUPERADMIN_COMPANY=$COMPANY_NAME,SUPERADMIN_DEPARTMENT=Platform" `
+  --set-secrets="DB_PASSWORD=aitsm-db-password:1,MFA_ENCRYPTION_KEY=aitsm-mfa-key:1,SMTP_USERNAME=aitsm-smtp-username:1,SMTP_PASSWORD=aitsm-smtp-password:1,SUPERADMIN_PASSWORD=aitsm-superadmin-password:1" `
   --add-volume="mount-path=/app/uploads,type=cloud-storage,bucket=$BUCKET,readonly=false,mount-options=uid=10001;gid=10001"
 ```
 
@@ -381,12 +391,12 @@ Test with separate administrator and end-user accounts:
 6. Knowledge creation and end-user reading.
 7. User approval, role management, and deactivation.
 8. Assets, monitoring, inventory, SLA, and Settings.
-9. Gemini chat, ticket analysis, configuration testing, and rate limiting.
+9. Deterministic AI fallback behavior, Ollama model settings, AI Bridge enable/disable, bridge heartbeat, test job, timeout fallback, and rate limiting.
 10. Profile-photo upload, approval, display, and persistence after a new revision.
 11. Colleague requests and messaging in two browser sessions.
 12. From each role, create and download the Windows collector package. Confirm end users receive `SELF` scope, administrators can receive `LAN` scope, the enrollment redeems only once, the Windows service starts automatically, an HTTPS report is accepted, health changes to Online, and revocation causes later reports to receive HTTP 401.
 
-Apply all ordered migrations through `V008__collector_self_service_enrollment.sql` before deploying this release. V008 must be applied before the application revision because production disables runtime schema mutation. Collector installation, scope, credential storage, firewall, verification, and uninstall guidance is in `collector/windows/README.md`.
+Apply every ordered migration in `db/migrations/index.txt` before deploying this release. GitHub deployment creates a no-traffic candidate whose startup migrator holds a PostgreSQL advisory lock; traffic moves only after migrations and the candidate health check succeed. Production still disables Exposed runtime schema mutation. Collector installation, scope, credential storage, firewall, AI Bridge verification, and uninstall guidance is in [`../collector/windows/README.md`](../collector/windows/README.md).
 
 Unauthenticated security checks:
 
@@ -402,7 +412,7 @@ Protected resources must return `401`, `403`, or redirect to login—not applica
 gcloud run services logs read $SERVICE --region=$REGION --limit=300
 ```
 
-Investigate every unexpected `500`. Logs must not contain passwords, cookies, CSRF values, MFA secrets, recovery codes, reset tokens, SMTP credentials, or Gemini credentials.
+Investigate every unexpected `500`. Logs must not contain passwords, cookies, CSRF values, MFA secrets, recovery codes, reset tokens, SMTP credentials, or future AI Bridge credentials.
 
 ## 15. Custom domain
 
@@ -442,15 +452,31 @@ gcloud run services update-traffic $SERVICE `
 
 Application and database rollback are separate. If a migration is incompatible with the previous application, restore the verified backup or apply a reviewed forward-fix migration. Routing traffic to an older container does not reverse database changes.
 
+### Database recovery procedure
+
+Restoring a Cloud SQL backup replaces the selected target instance. Never restore into the live production instance until the incident lead has confirmed the target backup, outage window, and rollback decision. Prefer a temporary recovery instance for verification first.
+
+```powershell
+# Inspect the known-good backup before any recovery action.
+gcloud sql backups list --instance=$SQL_INSTANCE --limit=10
+
+# Restore only after explicitly selecting the production recovery target.
+# This is destructive to the target instance.
+gcloud sql backups restore BACKUP_ID --restore-instance=$RECOVERY_INSTANCE
+```
+
+After recovery, verify the expected databases, run the application health endpoint, test an administrator login, and record the backup ID, recovery time, and outcome in the release record. Do not move Cloud Run traffic until those checks pass.
+
 ## 18. Final approval checklist
 
 - GitHub security checks pass, including dependency and secret scans.
 - Cloud Build succeeds for the committed SHA.
 - Cloud SQL backups and point-in-time recovery are enabled.
+- The most recent on-demand backup is recorded and the database recovery procedure is available.
 - Migrations complete with `ON_ERROR_STOP=1`.
 - Cloud Run is healthy with the final HTTPS origin.
 - Admin and end-user smoke tests pass.
-- SMTP and Gemini tests pass.
+- SMTP and deterministic AI fallback tests pass.
 - Bootstrap credentials are disabled and destroyed.
 - Logs contain no secrets or unexplained `500` responses.
 - A known-good revision and database recovery plan are available.

@@ -14,11 +14,26 @@ function setAiMessage(message, error = false) {
   const node = document.getElementById('aiConfigMessage');
   if (node) { node.textContent = message; node.classList.toggle('text-danger', error); }
 }
-function setAiStatus(message, tone = 'neutral') {
-  const node = document.getElementById('aiConnectionStatus');
-  if (node) { node.textContent = message; node.className = `status-pill status-pill-${tone}`; }
+function setAiButtonsDisabled(disabled) { ['aiSaveConfigBtn', 'aiTestBridgeBtn'].forEach(id => { const button = document.getElementById(id); if (button) button.disabled = disabled; }); }
+
+function refreshOllamaCommand() {
+  const model = document.getElementById('ollamaModel')?.value.trim() || 'qwen3:8b';
+  const command = document.getElementById('ollamaPullCommand');
+  if (command) command.textContent = `ollama pull ${model}`;
 }
-function setAiButtonsDisabled(disabled) { ['aiTestConnectionBtn', 'aiSaveConfigBtn'].forEach(id => { const button = document.getElementById(id); if (button) button.disabled = disabled; }); }
+
+async function copyOllamaCommand() {
+  const command = document.getElementById('ollamaPullCommand')?.textContent || 'ollama pull qwen3:8b';
+  const button = document.getElementById('copyOllamaCommandBtn');
+  try {
+    await navigator.clipboard.writeText(command);
+    if (button) button.textContent = 'Copied';
+  } catch (_) {
+    setAiMessage('Unable to copy automatically. Select and copy the command manually.', true);
+  } finally {
+    if (button) window.setTimeout(() => { button.textContent = 'Copy command'; }, 1800);
+  }
+}
 
 async function loadSlaPolicies() {
   const policies = await fetchJsonOrThrow('/api/sla');
@@ -69,25 +84,27 @@ async function saveAssetDetectionPrefixes() {
 
 async function loadAiConfig() {
   const data = await fetchJsonOrThrow('/api/ai/config');
-  document.getElementById('aiModel').value = data.model || 'gemini-3.8-flash';
-  setAiStatus('Not tested', 'neutral');
-  setAiMessage('Gemini credentials are configured securely on the server.');
+  document.getElementById('ollamaModel').value = data.ollamaModel || 'qwen3:8b';
+  refreshOllamaCommand();
+  const status = document.getElementById('ollamaBridgeStatus');
+  if (status) { status.textContent = data.localBridgeAvailable ? 'Online' : 'Not connected'; status.className = `status-pill ${data.localBridgeAvailable ? 'status-pill-success' : 'status-pill-warning'}`; }
+  const bridge = await fetchJsonOrThrow('/api/ai/bridge/status');
+  setAiMessage(bridge.message, !bridge.available && bridge.enabledCollectors > 0);
 }
 async function saveAiConfig() {
-  const model = document.getElementById('aiModel').value.trim();
-  if (!model) return setAiMessage('A Gemini model is required.', true);
-  setAiButtonsDisabled(true); setAiMessage('Saving Gemini configuration...');
-  try { await fetchJsonOrThrow('/api/ai/config', { method: 'POST', body: JSON.stringify({ model }) }, true); setAiMessage('Gemini model saved.'); }
-  catch (error) { setAiMessage(error.message || 'Unable to save Gemini configuration.', true); }
+  const ollamaModel = document.getElementById('ollamaModel').value.trim();
+  if (!ollamaModel) return setAiMessage('An Ollama model identifier is required.', true);
+  setAiButtonsDisabled(true); setAiMessage('Saving Ollama model preference...');
+  try { await fetchJsonOrThrow('/api/ai/config', { method: 'POST', body: JSON.stringify({ ollamaModel }) }, true); setAiMessage('Ollama model preference saved. The bridge will verify that exact model on its next heartbeat.'); await loadAiConfig(); }
+  catch (error) { setAiMessage(error.message || 'Unable to save the Ollama model preference.', true); }
   finally { setAiButtonsDisabled(false); }
 }
-async function testAiConnection() {
-  setAiButtonsDisabled(true); setAiMessage('Testing Gemini connection...');
-  try {
-    const data = await fetchJsonOrThrow('/api/ai/test', { method: 'POST', body: '{}' }, true);
-    setAiStatus('Connected', 'ok'); setAiMessage(data.message || 'Gemini connection successful.');
-  } catch (error) { setAiStatus('Unavailable', 'fail'); setAiMessage(error.message || 'Unable to connect to Gemini.', true); }
-  finally { setAiButtonsDisabled(false); }
+
+async function testAiBridge() {
+  setAiButtonsDisabled(true); setAiMessage('Sending a test job through the secure AI Bridge…');
+  try { const result = await fetchJsonOrThrow('/api/ai/bridge/test', { method: 'POST' }); setAiMessage(result.message || 'AI Bridge test passed.'); }
+  catch (error) { setAiMessage(error.message || 'AI Bridge test failed.', true); }
+  finally { setAiButtonsDisabled(false); await loadAiConfig().catch(() => {}); }
 }
 
 function collectorFilename(response) {
@@ -97,10 +114,67 @@ function collectorFilename(response) {
 
 let collectorRecords = new Map();
 
+function ensureCollectorActionMenuBackdrop() {
+  if (document.getElementById('collectorActionMenuBackdrop')) return;
+  const backdrop = document.createElement('div');
+  backdrop.id = 'collectorActionMenuBackdrop';
+  backdrop.className = 'action-menu-backdrop hidden';
+  backdrop.addEventListener('click', closeCollectorActionMenus);
+  document.body.appendChild(backdrop);
+}
+
+function closeCollectorActionMenus() {
+  document.querySelectorAll('.collector-action-menu').forEach((menu) => menu.classList.add('hidden'));
+  document.querySelectorAll('.collector-menu-trigger').forEach((button) => button.setAttribute('aria-expanded', 'false'));
+  document.getElementById('collectorActionMenuBackdrop')?.classList.add('hidden');
+}
+
+function toggleCollectorActionMenu(event, menuId) {
+  event.stopPropagation();
+  const trigger = event.currentTarget;
+  const menu = document.getElementById(menuId);
+  if (!menu) return;
+
+  const shouldOpen = menu.classList.contains('hidden');
+  closeCollectorActionMenus();
+  if (!shouldOpen) return;
+
+  ensureCollectorActionMenuBackdrop();
+  document.getElementById('collectorActionMenuBackdrop')?.classList.remove('hidden');
+  const rect = trigger.getBoundingClientRect();
+  const menuWidth = 180;
+  menu.style.position = 'fixed';
+  menu.style.top = `${Math.min(window.innerHeight - 12, rect.bottom + 4)}px`;
+  menu.style.left = `${Math.max(8, Math.min(window.innerWidth - menuWidth - 8, rect.right - menuWidth))}px`;
+  menu.classList.remove('hidden');
+  trigger.setAttribute('aria-expanded', 'true');
+}
+
+function collectorActionMenu(item, index) {
+  const id = JSON.stringify(item.collectorId);
+  const menuId = `collectorActionMenu-${index}`;
+  const actions = [
+    `<button type='button' onclick='downloadCollectorDiagnostics(${id})'>Download diagnostics</button>`
+  ];
+  if (item.scope === 'LAN' && item.state !== 'REVOKED') {
+    actions.push(`<button type='button' onclick='setCollectorAiBridge(${id}, ${!item.aiBridgeEnabled})'>${item.aiBridgeEnabled ? 'Disable' : 'Enable'} AI Bridge</button>`);
+  }
+  if (item.state !== 'REVOKED') {
+    actions.push(`<button type='button' onclick='repairCollector(${id})'>Download repair installer</button>`);
+    actions.push(`<button class='collector-menu-danger' type='button' onclick='revokeCollector(${id})'>Revoke collector</button>`);
+  } else {
+    actions.push(`<button class='collector-menu-danger' type='button' onclick='archiveCollector(${id})'>Remove from list</button>`);
+  }
+  return `<div class='row-action-wrap'>
+    <button class='btn btn-ghost icon-btn collector-menu-trigger' type='button' onclick='toggleCollectorActionMenu(event, "${menuId}")' aria-haspopup='menu' aria-expanded='false' aria-controls='${menuId}' aria-label='Actions for ${aitsmEscapeHtml(item.name || 'collector')}' title='Collector actions'>•••</button>
+    <div id='${menuId}' class='row-action-menu collector-action-menu hidden' role='menu'>${actions.join('')}</div>
+  </div>`;
+}
+
 async function createAndDownloadCollector(packageRequest, status) {
   const enrollment = await fetchJsonOrThrow('/api/monitoring/collector-packages', { method: 'POST', body: JSON.stringify(packageRequest) });
   const response = await fetch('/api/monitoring/collector-installer/windows', {
-    method: 'POST', headers: authHeaders(), body: JSON.stringify({ enrollmentCode: enrollment.enrollmentCode })
+    method: 'POST', headers: authHeaders(), body: JSON.stringify({ enrollmentCode: enrollment.enrollmentCode, repairCollectorId: enrollment.repairCollectorId || null })
   });
   if (!response.ok) { const data = await response.json().catch(() => ({})); throw new Error(data.error || 'Installer download failed'); }
   const url = URL.createObjectURL(await response.blob());
@@ -125,15 +199,17 @@ async function downloadCollectorInstaller() {
 }
 
 async function repairCollector(id) {
+  closeCollectorActionMenus();
   const item = collectorRecords.get(id); if (!item) return;
   const status = document.getElementById('collectorDownloadStatus');
   status.textContent = `Creating a repair installer for ${item.name}…`; status.className = 'small';
   try {
-    await createAndDownloadCollector({ name: item.name, siteId: item.siteId, scope: item.scope }, status);
+    await createAndDownloadCollector({ name: item.name, siteId: item.siteId, scope: item.scope, repairCollectorId: item.collectorId }, status);
   } catch (error) { status.textContent = error.message || 'Unable to create repair installer.'; status.className = 'small text-danger'; }
 }
 
 async function downloadCollectorDiagnostics(id) {
+  closeCollectorActionMenus();
   const response = await fetch(`/api/monitoring/collectors/${encodeURIComponent(id)}/diagnostics`, { headers: authHeaders() });
   if (!response.ok) { const data = await response.json().catch(() => ({})); return showAppAlert(data.error || 'Unable to download diagnostics'); }
   const url = URL.createObjectURL(await response.blob());
@@ -144,19 +220,45 @@ async function loadCollectors() {
   const rows = document.getElementById('collectorRows');
   const collectors = await fetchJsonOrThrow('/api/monitoring/collectors');
   collectorRecords = new Map(collectors.map(item => [item.collectorId, item]));
-  rows.innerHTML = collectors.length ? collectors.map(item => `<tr><td>${aitsmEscapeHtml(item.name)}<div class='small'>${aitsmEscapeHtml(item.statusReason || '')}</div><div class='small'>Agent ${aitsmEscapeHtml(item.agentVersion || 'legacy')} · Failures ${Number(item.consecutiveFailures || 0)}</div>${item.lastReportedError ? `<div class='small text-danger'>Last error: ${aitsmEscapeHtml(item.lastReportedError)}</div>` : ''}</td><td>${aitsmEscapeHtml(item.scope)}</td><td><span class='badge ${item.state === 'ONLINE' ? 'resolved' : 'warning'}'>${aitsmEscapeHtml(item.state)}</span></td><td>${aitsmEscapeHtml(item.lastSeenAt ? new Date(item.lastSeenAt).toLocaleString() : 'Never')}</td><td><div class='inline-actions'><button class='btn btn-ghost' type='button' onclick='downloadCollectorDiagnostics("${item.collectorId}")'>Diagnostics</button>${item.state === 'REVOKED' ? '' : `<button class='btn btn-ghost' type='button' onclick='repairCollector("${item.collectorId}")'>Repair</button><button class='btn btn-ghost' type='button' onclick='revokeCollector("${item.collectorId}")'>Revoke</button>`}</div></td></tr>`).join('') : `<tr><td colspan='5'>No collectors enrolled.</td></tr>`;
+  rows.innerHTML = collectors.length ? collectors.map((item, index) => `<tr><td>${aitsmEscapeHtml(item.name)}<div class='small'>${aitsmEscapeHtml(item.statusReason || '')}</div><div class='small'>Agent ${aitsmEscapeHtml(item.agentVersion || 'legacy')} · Failures ${Number(item.consecutiveFailures || 0)}</div>${item.scope === 'LAN' ? `<div class='small'>AI Bridge: ${item.aiBridgeEnabled ? (item.aiBridgeAvailable ? 'ready' : 'enabled, waiting for Ollama') : 'disabled'}${item.aiBridgeModel ? ` · ${aitsmEscapeHtml(item.aiBridgeModel)}` : ''}</div>` : ''}${item.aiBridgeLastError ? `<div class='small text-danger'>AI: ${aitsmEscapeHtml(item.aiBridgeLastError)}</div>` : ''}${item.lastReportedError ? `<div class='small text-danger'>Last error: ${aitsmEscapeHtml(item.lastReportedError)}</div>` : ''}</td><td>${aitsmEscapeHtml(item.scope)}</td><td><span class='badge ${item.state === 'ONLINE' ? 'resolved' : 'warning'}'>${aitsmEscapeHtml(item.state)}</span></td><td>${aitsmEscapeHtml(item.lastSeenAt ? new Date(item.lastSeenAt).toLocaleString() : 'Never')}</td><td class='collector-actions-cell'>${collectorActionMenu(item, index)}</td></tr>`).join('') : `<tr><td colspan='5'>No collectors enrolled.</td></tr>`;
+}
+
+async function setCollectorAiBridge(id, enabled) {
+  closeCollectorActionMenus();
+  const item = collectorRecords.get(id); if (!item) return;
+  if (!confirm(`${enabled ? 'Enable' : 'Disable'} AI Bridge on ${item.name}?`)) return;
+  try {
+    await fetchJsonOrThrow(`/api/ai/bridge/collectors/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify({ enabled }) }, true);
+    await Promise.all([loadCollectors(), loadAiConfig()]);
+  } catch (error) { showAppAlert(error.message || 'Unable to update AI Bridge.'); }
 }
 
 async function revokeCollector(id) {
+  closeCollectorActionMenus();
   if (!confirm('Revoke this collector? It will stop accepting reports immediately.')) return;
   await fetchJsonOrThrow(`/api/monitoring/collectors/${encodeURIComponent(id)}`, { method: 'DELETE' });
   await loadCollectors();
 }
 
+async function archiveCollector(id) {
+  closeCollectorActionMenus();
+  const item = collectorRecords.get(id);
+  if (!item || item.state !== 'REVOKED') return;
+  if (!confirm(`Remove ${item.name} from the active collector list? Historical records will be retained. This does not uninstall the Windows service.`)) return;
+  try {
+    await fetchJsonOrThrow(`/api/monitoring/collectors/${encodeURIComponent(id)}/archive`, { method: 'DELETE' });
+    await loadCollectors();
+  } catch (error) {
+    showAppAlert(error.message || 'Unable to remove the collector from the active list.');
+  }
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
-  document.getElementById('aiTestConnectionBtn')?.addEventListener('click', testAiConnection);
   document.getElementById('aiSaveConfigBtn')?.addEventListener('click', saveAiConfig);
+  document.getElementById('aiTestBridgeBtn')?.addEventListener('click', testAiBridge);
   document.getElementById('downloadCollectorBtn')?.addEventListener('click', downloadCollectorInstaller);
+  document.getElementById('ollamaModel')?.addEventListener('input', refreshOllamaCommand);
+  document.getElementById('copyOllamaCommandBtn')?.addEventListener('click', copyOllamaCommand);
   try { await Promise.all([loadSlaPolicies(), loadAssetDetectionPrefixes(), loadAiConfig(), loadCollectors()]); }
   catch (error) { showAppAlert(error.message || 'Unable to load settings data'); }
 });

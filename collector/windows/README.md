@@ -1,6 +1,6 @@
 # AITSM Windows collector
 
-The production portal provides a one-click, self-contained Windows x64 installer. It enrolls once over HTTPS, installs `AITSMCollector` as an automatic Windows service, stores its collector credential with Windows DPAPI (`LocalMachine`), restricts the installation folder to SYSTEM and local Administrators, and begins reporting every 60 seconds. No inbound firewall rule, copied token, PowerShell command, .NET installation, or scheduled task is required.
+The portal provides a one-click, self-contained Windows x64 installer. It enrolls once over HTTPS, installs `AITSMCollector` as an automatic Windows service, stores its collector credential with Windows DPAPI (`LocalMachine`), restricts the installation folder to SYSTEM and local Administrators, and begins reporting every 60 seconds. Version 1.3.0 also contains the optional Ollama AI Bridge. No inbound firewall rule, copied token, PowerShell command, .NET installation, or scheduled task is required.
 
 ## Download and install
 
@@ -21,6 +21,10 @@ An administrator may instead choose **This computer only**. Only a Company/LAN c
 
 End-user installers are always forced to `SELF` scope by the server, even if a request is modified. A self-device collector can report exactly one private-address host with its own authenticated hardware inventory and resource telemetry. It cannot poll LAN discovery commands or submit peer devices.
 
+### Optional local AI bridge
+
+Only an active `LAN` collector can be enabled as an AI Bridge. Install Ollama on that Windows computer, pull the exact model configured in Settings, keep Ollama on `127.0.0.1:11434`, then choose **Enable AI Bridge** from the collector action menu. The service sends an authenticated heartbeat every 30 seconds and polls the portal for short-lived jobs over outbound HTTPS. It calls Ollama only on localhost and returns the result over the same authenticated channel. `SELF` collectors cannot claim or complete AI jobs. Revoking the collector immediately invalidates both telemetry and bridge access.
+
 Each download contains a high-entropy, single-use enrollment code in its generated filename. The server stores only its SHA-256 hash. Redemption returns the long-lived collector token once to the installer; the token is then DPAPI-encrypted on that Windows machine. Never share an unredeemed installer. Generate a new one if it expires or is renamed.
 
 ## Health, repair, revocation, and uninstall
@@ -31,7 +35,7 @@ Each download contains a high-entropy, single-use enrollment code in its generat
 - **Never connected**: enrollment exists but no report has arrived.
 - **Revoked**: the server will reject further reports for that credential.
 
-Running a newly downloaded installer from the same portal again repairs the local service installation, updates the collector binary, and reuses the already protected local credential. Running a newly downloaded installer from a different AITSM environment explicitly switches the local service to that environment: the new single-use enrollment is redeemed first, the DPAPI-protected credential is replaced, and the service is restarted. The previous server record remains available for administrators to revoke or retain as audit history.
+The **Repair** action produces an installer tied to that exact collector record. When it runs on the matching computer, it repairs the service and updates the binary while reusing the protected credential. A fresh installer always redeems its single-use enrollment—even when another collector for the same portal is already installed—so the computer can be moved to the account that downloaded it. An installer for another environment also replaces the protected credential and restarts the service. Previous server records remain available for revocation or audit history.
 
 The collector starts automatically after Windows boots (delayed automatic start), restarts after service crashes, and uses exponential retry up to 15 minutes during repeated network or server failures. It records a secret-free local health snapshot at `C:\ProgramData\AITSMCollector\collector-status.json`. Administrators and device owners can download a server-side diagnostic summary or create a repair installer from the portal.
 
@@ -47,7 +51,8 @@ Then revoke the matching portal entry. The encrypted credential and local status
 
 ## Network and troubleshooting
 
-- Allow outbound TCP 443 to the AITSM production hostname. No inbound port or router change is required.
+- Allow outbound TCP 443 to the AITSM hostname. No inbound port or router change is required.
+- For AI, allow the Windows service to reach local `127.0.0.1:11434`; do not publish that port to the LAN or internet.
 - Company/LAN discovery is restricted to the private CIDRs configured in **Settings → Asset Detection Configuration**.
 - HTTP 401 in the local log means the credential was revoked or rejected. Revoke/uninstall it and download a replacement.
 - A Windows clock that is badly out of sync no longer blocks enrollment data; the server safely substitutes its authoritative receipt time while preserving the reported device data.
@@ -57,11 +62,12 @@ Then revoke the matching portal entry. The encrypted credential and local status
 
 ## Build and release
 
-The installer source is in `collector/windows/installer`. Build the production Windows x64 resource with:
+The installer source is in `collector/windows/installer`. Build the production Windows x64 release with:
 
 ```powershell
 dotnet publish collector/windows/installer/AITSMCollectorSetup.csproj -c Release -r win-x64 --self-contained true -o collector/windows/installer/publish
-Copy-Item collector/windows/installer/publish/AITSMCollectorSetup.exe src/main/resources/collector/AITSMCollectorSetup.exe -Force
+Get-FileHash collector/windows/installer/publish/AITSMCollectorSetup.exe -Algorithm SHA256
+gh release create collector-vX.Y.Z "collector/windows/installer/publish/AITSMCollectorSetup.exe#AITSMCollectorSetup.exe" --target beta
 ```
 
-The packaged EXE is served only after an authenticated, CSRF-protected request whose enrollment code belongs to the requesting account. Production deployment must apply `V008__collector_self_service_enrollment.sql` before starting the new application revision.
+Set `COLLECTOR_INSTALLER_URL` to the immutable release asset and pin its checksum in `COLLECTOR_INSTALLER_SHA256`. The portal downloads and verifies the release once per instance, then serves it only after an authenticated, CSRF-protected request whose enrollment code belongs to the requesting account. Deployment must apply every migration listed in `db/migrations/index.txt` before receiving traffic.

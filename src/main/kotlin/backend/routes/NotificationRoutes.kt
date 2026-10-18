@@ -22,7 +22,11 @@ fun Route.notificationRoutes(service: NotificationService) {
     route("/api/notifications") {
         get {
             val userId = call.userId() ?: return@get call.respond(HttpStatusCode.Unauthorized, ApiErrorResponse(401, "Authentication required"))
-            call.respond(service.list(userId))
+            val page = call.request.queryParameters["page"]?.toIntOrNull()?.coerceAtLeast(1) ?: 1
+            val pageSize = call.request.queryParameters["pageSize"]?.toIntOrNull()?.coerceIn(1, 100) ?: 25
+            val status = call.request.queryParameters["status"] ?: "all"
+            val type = call.request.queryParameters["type"]
+            call.respond(service.page(userId, page, pageSize, status, type))
         }
 
         get("/unread-count") {

@@ -1,0 +1,141 @@
+.collector-settings-card {
+  min-width: 0;
+}
+
+.ai-settings-card {
+  min-width: 0;
+}
+
+.status-pill-warning {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.ai-provider-section + .ai-provider-section {
+  border-top: 1px solid var(--border);
+  margin-top: 24px;
+  padding-top: 24px;
+}
+
+.provider-heading {
+  align-items: flex-start;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.provider-heading h4 {
+  font-size: 1rem;
+  margin: 0 0 4px;
+}
+
+.provider-heading p {
+  margin: 0;
+}
+
+.ollama-command-row {
+  align-items: center;
+  background: var(--surface-soft, #f5f8fc);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 10px 12px;
+}
+
+.ollama-command-row code {
+  overflow-wrap: anywhere;
+}
+
+.readiness-list {
+  color: var(--text-muted);
+  line-height: 1.55;
+  margin: 0;
+  padding-left: 22px;
+}
+
+.local-ai-notice {
+  background: #fff8e1;
+  border: 1px solid #f3d989;
+  border-radius: 12px;
+  color: #6a4a00;
+  line-height: 1.45;
+  padding: 12px 14px;
+}
+
+.local-ai-continuity {
+  background: #edf9f2;
+  border-color: #b9e6cc;
+  color: #155d36;
+}
+
+.collector-table {
+  table-layout: fixed;
+  min-width: 620px;
+}
+
+.collector-table th:first-child {
+  width: 34%;
+}
+
+.collector-table th:nth-child(2) {
+  width: 12%;
+}
+
+.collector-table th:nth-child(3) {
+  width: 15%;
+}
+
+.collector-table th:nth-child(4) {
+  width: 27%;
+}
+
+.collector-table th:last-child {
+  width: 58px;
+}
+
+.collector-table td {
+  overflow-wrap: anywhere;
+  vertical-align: middle;
+}
+
+.collector-actions-cell {
+  text-align: center;
+  overflow-wrap: normal !important;
+}
+
+.collector-menu-trigger {
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  padding: 0;
+  letter-spacing: 2px;
+}
+
+.collector-action-menu .collector-menu-danger {
+  color: var(--danger);
+}
+
+@media (max-width: 720px) {
+  .provider-heading,
+  .ollama-command-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .provider-heading .status-pill {
+    align-self: flex-start;
+  }
+
+  .collector-table {
+    min-width: 560px;
+  }
+
+  .collector-table th,
+  .collector-table td {
+    padding-left: 9px;
+    padding-right: 9px;
+  }
+}

@@ -149,7 +149,7 @@ function renderMonitoringHealthPanel(summary, devices) {
   panel.innerHTML = `
     <div class='insight-grid monitor-health-grid'>
       <div class='insight-item'><div class='insight-label'>Collector health</div><div class='insight-value monitor-text-wrap'>${aitsmEscapeHtml(collectorState)}</div></div>
-      <div class='insight-item'><div class='insight-label'>Discovery</div><div class='insight-value'>${aitsmEscapeHtml(String(summary?.discoveryState || 'NEVER').replaceAll('_', ' '))}</div></div>
+      <div class='insight-item'><div class='insight-label'>LAN scan</div><div class='insight-value'>${aitsmEscapeHtml(String(summary?.discoveryState || 'NEVER').replaceAll('_', ' '))}</div></div>
       <div class='insight-item'><div class='insight-label'>Telemetry coverage</div><div class='insight-value'>${available}/${devices.length}</div></div>
       <div class='insight-item'><div class='insight-label'>Last data received</div><div class='insight-value monitor-text-wrap monitor-updated-at'>${formatLastSeen(lastUpdate)}</div></div>
     </div>`;
@@ -160,7 +160,7 @@ function renderMonitorCards(devices) {
   if (!wrap) return;
 
   if (!devices.length) {
-    wrap.innerHTML = `<div class='empty-state'><h3>No collector data received</h3><p>Enroll and start a collector on the target LAN. Refresh Discovery queues work for that collector; Cloud Run does not scan private networks directly.</p><button class='btn btn-primary' onclick='refreshDiscovery()'>Queue discovery</button></div>`;
+    wrap.innerHTML = `<div class='empty-state'><h3>No collector data received</h3><p>Enroll and start a collector on the target LAN. Scan LAN Now queues work for that collector; Cloud Run does not scan private networks directly.</p><button class='btn btn-primary' onclick='refreshDiscovery()'>Scan LAN Now</button></div>`;
     return;
   }
 
@@ -230,14 +230,14 @@ function setRefreshDiscoveryBusy(isBusy) {
   const button = document.getElementById('refreshDiscoveryBtn');
   if (!button) return;
   button.disabled = isBusy;
-  button.textContent = isBusy ? 'Refreshing…' : 'Refresh Discovery';
+  button.textContent = isBusy ? 'Queuing LAN scan…' : 'Scan LAN Now';
 }
 
 async function refreshDiscovery() {
   setRefreshDiscoveryBusy(true);
   try {
     const data = await window.aitsmFetchJson('/api/monitoring/refresh-discovery', { method: 'POST' });
-    updateMonitoringLiveStatus('live', data.message || 'Discovery queued for collector');
+    updateMonitoringLiveStatus('live', data.message || 'LAN scan queued for collector');
     await loadMonitoring({ force: true, source: 'queued' });
   } catch (error) {
     alert(error.message || 'Failed to queue discovery');
@@ -286,7 +286,11 @@ async function loadMonitoring({ force = false, source = 'manual' } = {}) {
     renderLanIpSuggestions(safePeerIps);
 
     monitoringLastUpdatedAt = summary.timestamp || monitoringLastUpdatedAt;
-    updateMonitoringLiveStatus('live', source === 'queued' ? 'Discovery pending on collector' : undefined);
+    const discoveryState = String(summary.discoveryState || '').toUpperCase();
+    const discoveryPending = ['PENDING', 'IN_PROGRESS'].includes(discoveryState);
+    updateMonitoringLiveStatus('live', discoveryPending
+      ? `LAN scan ${discoveryState.toLowerCase().replace('_', ' ')}; waiting for LAN collector`
+      : (source === 'queued' ? 'LAN scan queued; waiting for LAN collector' : undefined));
   } catch {
     monitoringDevicesCache = [];
     renderMonitorTableCount(0, 0);

@@ -83,7 +83,7 @@ async function downloadMyCollector() {
     const response = await fetch('/api/monitoring/collector-packages', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ name: `${window.currentUser?.fullName || 'User'} Windows device`, siteId: 'self-device', scope: 'SELF' }) });
     const enrollment = await response.json();
     if (!response.ok) throw new Error(enrollment.error || 'Unable to create enrollment');
-    const download = await fetch('/api/monitoring/collector-installer/windows', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ enrollmentCode: enrollment.enrollmentCode }) });
+    const download = await fetch('/api/monitoring/collector-installer/windows', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ enrollmentCode: enrollment.enrollmentCode, repairCollectorId: enrollment.repairCollectorId || null }) });
     if (!download.ok) { const data = await download.json().catch(() => ({})); throw new Error(data.error || 'Installer download failed'); }
     const disposition = download.headers.get('content-disposition') || '';
     const filename = disposition.match(/filename="([^"]+)"/i)?.[1] || 'AITSMCollectorSetup.exe';
@@ -102,10 +102,10 @@ async function repairMyCollector(id) {
   const status = document.getElementById('myCollectorStatus');
   status.textContent = `Creating a repair installer for ${item.name}…`; status.className = 'small';
   try {
-    const response = await fetch('/api/monitoring/collector-packages', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ name: item.name, siteId: item.siteId, scope: 'SELF' }) });
+    const response = await fetch('/api/monitoring/collector-packages', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ name: item.name, siteId: item.siteId, scope: 'SELF', repairCollectorId: item.collectorId }) });
     const enrollment = await response.json();
     if (!response.ok) throw new Error(enrollment.error || 'Unable to create repair enrollment');
-    const download = await fetch('/api/monitoring/collector-installer/windows', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ enrollmentCode: enrollment.enrollmentCode }) });
+    const download = await fetch('/api/monitoring/collector-installer/windows', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ enrollmentCode: enrollment.enrollmentCode, repairCollectorId: enrollment.repairCollectorId || null }) });
     if (!download.ok) { const data = await download.json().catch(() => ({})); throw new Error(data.error || 'Installer download failed'); }
     const disposition = download.headers.get('content-disposition') || '';
     const filename = disposition.match(/filename="([^"]+)"/i)?.[1] || 'AITSMCollectorSetup.exe';

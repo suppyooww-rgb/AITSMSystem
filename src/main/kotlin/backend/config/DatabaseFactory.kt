@@ -175,10 +175,31 @@ object MonitoringCollectorsTable : Table("monitoring_collectors") {
     val enrolledAt = datetime("enrolled_at")
     val lastSeenAt = datetime("last_seen_at").nullable().index()
     val revokedAt = datetime("revoked_at").nullable().index()
+    val archivedAt = datetime("archived_at").nullable().index()
     val agentVersion = varchar("agent_version", 40).nullable()
     val serviceStartedAt = datetime("service_started_at").nullable()
     val lastError = varchar("last_error", 500).nullable()
     val consecutiveFailures = integer("consecutive_failures").default(0)
+    val aiBridgeEnabled = bool("ai_bridge_enabled").default(false).index()
+    val aiBridgeAvailable = bool("ai_bridge_available").default(false)
+    val aiBridgeLastSeenAt = datetime("ai_bridge_last_seen_at").nullable().index()
+    val aiBridgeModel = varchar("ai_bridge_model", 150).nullable()
+    val aiBridgeLastError = varchar("ai_bridge_last_error", 500).nullable()
+    override val primaryKey = PrimaryKey(id)
+}
+
+object AiBridgeJobsTable : Table("ai_bridge_jobs") {
+    val id = uuid("id")
+    val collectorId = uuid("collector_id").references(MonitoringCollectorsTable.id, onDelete = ReferenceOption.SET_NULL).nullable().index()
+    val status = varchar("status", 20).index()
+    val model = varchar("model", 150)
+    val requestPayload = text("request_payload")
+    val responsePayload = text("response_payload").nullable()
+    val errorMessage = varchar("error_message", 500).nullable()
+    val createdAt = datetime("created_at").index()
+    val claimedAt = datetime("claimed_at").nullable()
+    val completedAt = datetime("completed_at").nullable()
+    val expiresAt = datetime("expires_at").index()
     override val primaryKey = PrimaryKey(id)
 }
 
@@ -250,6 +271,7 @@ object TicketsTable : Table("tickets") {
     val priority = varchar("priority", 20)
     val category = varchar("category", 80)
     val status = varchar("status", 30).index()
+    val assignedToUserId = integer("assigned_to_user_id").references(UsersTable.id, onDelete = ReferenceOption.SET_NULL).nullable().index()
     val assignedTo = varchar("assigned_to", 150).nullable()
     val reviewedResolution = text("reviewed_resolution").nullable()
     val resolutionUpdatedBy = varchar("resolution_updated_by", 150).nullable()
@@ -275,6 +297,11 @@ object TicketHistoryTable : Table("ticket_history") {
     val id = integer("id").autoIncrement()
     val ticketId = integer("ticket_id").references(TicketsTable.id, onDelete = ReferenceOption.CASCADE).index()
     val status = varchar("status", 30).index()
+    val previousStatus = varchar("previous_status", 30).nullable()
+    val workNote = text("work_note").nullable()
+    val userMessage = text("user_message").nullable()
+    val resolutionCategory = varchar("resolution_category", 80).nullable()
+    val notifyRequester = bool("notify_requester").default(false)
     val updatedBy = varchar("updated_by", 150)
     val timestamp = datetime("timestamp").index()
     override val primaryKey = PrimaryKey(id)
@@ -463,6 +490,7 @@ object DatabaseFactory {
                 EulaAcceptanceTable,
                 DevicesTable,
                 MonitoringCollectorsTable,
+                AiBridgeJobsTable,
                 CollectorEnrollmentCodesTable,
                 MonitoringDevicesTable,
                 MonitoringDeviceAddressesTable,

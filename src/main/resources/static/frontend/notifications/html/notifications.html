@@ -1,0 +1,16 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Notifications | AITSM</title><link rel="stylesheet" href="/shared/css/styles.css"></head>
+<body><div class="app-layout"><aside id="notificationSidebar" class="sidebar"></aside><main class="content">
+  <section id="utilityHeader" class="utility-bar card"></section>
+  <div class="topbar"><div><h1 class="page-title">Notification history</h1><p class="page-subtitle">Review recent activity retained for your account.</p></div><button id="markAllHistoryRead" class="btn btn-ghost" type="button">Mark all read</button></div>
+  <section class="card">
+    <div class="grid form-grid">
+      <label class="form-group">Status<select id="notificationStatus"><option value="all">All</option><option value="unread">Unread</option><option value="read">Read</option></select></label>
+      <label class="form-group">Type<input id="notificationType" placeholder="All event types"></label>
+      <label class="form-group">Items per page<select id="notificationPageSize"><option>10</option><option selected>25</option><option>50</option></select></label>
+    </div>
+    <p id="notificationHistoryStatus" class="small" role="status" aria-live="polite">Loading…</p>
+    <div id="notificationHistory" class="notification-list"></div>
+    <div class="inline-actions" style="margin-top:16px"><button id="notificationPrevious" class="btn btn-ghost" type="button">Previous</button><span id="notificationPageSummary" class="small"></span><button id="notificationNext" class="btn btn-ghost" type="button">Next</button></div>
+  </section>
+</main></div><script src="/modules/common/js/app.js"></script><script>mountRoleAwareShell('notificationSidebar');</script><script src="/notifications/js/notifications.js"></script></body></html>

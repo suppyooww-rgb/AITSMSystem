@@ -1,11 +1,14 @@
 .git
-.github
 .gradle
 .idea
 .kotlin
 .vscode
 build
 uploads
+.codex-tmp
+output
+tmp
+src/main/resources/collector/AITSMCollectorSetup.exe
 .env
 .env.*
 !.env.example

@@ -70,10 +70,15 @@
         <div class='card-head'>
           <div>
             <h3 class='section-title'>Operational Feed</h3>
-            <p class='section-subtitle'>Critical device alerts and admin notifications.</p>
+            <p class='section-subtitle'>Live critical device alerts and admin notifications. The latest eight items are shown.</p>
+          </div>
+          <div class='inline-actions'>
+            <span id='adminOpsFeedStatus' class='small' aria-live='polite'>Loading…</span>
+            <button id='refreshAdminOpsFeedBtn' class='btn btn-ghost' type='button'>Refresh</button>
           </div>
         </div>
         <div id='adminOpsFeed' class='notification-list'></div>
+        <p class='small' style='margin-top:12px'>Older items remain available from the notification bell.</p>
       </article>
       <article class='card'>
         <div class='card-head'>

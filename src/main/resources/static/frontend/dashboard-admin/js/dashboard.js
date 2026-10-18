@@ -14,8 +14,11 @@ const dashboardState = {
 };
 
 const DASHBOARD_TELEMETRY_REFRESH_MS = 5 * 1000;
+const DASHBOARD_FEED_REFRESH_MS = 10 * 1000;
 let dashboardTelemetryRefreshTimer = null;
 let dashboardTelemetryRefreshInFlight = false;
+let dashboardFeedRefreshTimer = null;
+let dashboardFeedRefreshInFlight = false;
 
 function parseDate(value) {
   const date = new Date(value || '');
@@ -554,6 +557,13 @@ function renderAdminOpsFeed(devices, notifications) {
   }).join('');
 }
 
+function updateAdminOpsFeedStatus(message, failed = false) {
+  const status = document.getElementById('adminOpsFeedStatus');
+  if (!status) return;
+  status.textContent = message;
+  status.classList.toggle('text-danger', failed);
+}
+
 function applyTrendRendering() {
   const trendData = buildTrendData(dashboardState.tickets, dashboardState.trend);
   renderTrendFilterOptions(trendData.availableMonths, dashboardState.trend.month);
@@ -651,7 +661,7 @@ async function loadAdminDashboard() {
       window.aitsmFetchAllPaginated('/api/tickets'),
       fetchJsonOrThrow('/api/monitoring/summary'),
       fetchJsonOrThrow('/api/monitoring/lan-devices'),
-      fetchJsonOrThrow('/api/notifications'),
+      fetchJsonOrThrow('/api/notifications?page=1&pageSize=8'),
       fetchJsonOrThrow('/api/inventory/stats'),
       fetchJsonOrThrow('/api/sla/analytics')
     ]);
@@ -677,6 +687,7 @@ async function loadAdminDashboard() {
     if (recentRows) clearTableSkeleton(recentRows);
     renderRecentAdminTickets(dashboardState.tickets);
     renderAdminOpsFeed(dashboardState.lanDevices, dashboardState.notifications);
+    updateAdminOpsFeedStatus(`Updated ${new Date().toLocaleTimeString()}`);
   } catch (error) {
     const summary = document.getElementById('summaryCards');
     if (summary) summary.innerHTML = `<div class='card'><p class='small'>${escapeHtml(error.message || 'Unable to load dashboard data')}</p></div>`;
@@ -687,9 +698,26 @@ async function loadAdminDashboard() {
     renderSystemPerformance();
     if (recentRows) renderTableErrorState(recentRows, 5, error.message || 'Unable to load recent tickets');
     renderAdminOpsFeed([], []);
+    updateAdminOpsFeedStatus('Unable to refresh', true);
   } finally {
     if (recentRows) clearTableSkeleton(recentRows);
     setAnalyticsBuffering(false);
+  }
+}
+
+async function refreshDashboardFeed() {
+  if (dashboardFeedRefreshInFlight || document.hidden) return;
+  dashboardFeedRefreshInFlight = true;
+  updateAdminOpsFeedStatus('Refreshing…');
+  try {
+    const notifications = await fetchJsonOrThrow('/api/notifications?page=1&pageSize=8');
+    dashboardState.notifications = Array.isArray(notifications?.items) ? notifications.items : [];
+    renderAdminOpsFeed(dashboardState.lanDevices, dashboardState.notifications);
+    updateAdminOpsFeedStatus(`Updated ${new Date().toLocaleTimeString()}`);
+  } catch {
+    updateAdminOpsFeedStatus('Refresh failed — retrying', true);
+  } finally {
+    dashboardFeedRefreshInFlight = false;
   }
 }
 
@@ -718,16 +746,27 @@ function startDashboardTelemetryRefresh() {
   dashboardTelemetryRefreshTimer = window.setInterval(refreshDashboardTelemetry, DASHBOARD_TELEMETRY_REFRESH_MS);
 }
 
+function startDashboardFeedRefresh() {
+  if (dashboardFeedRefreshTimer) window.clearInterval(dashboardFeedRefreshTimer);
+  dashboardFeedRefreshTimer = window.setInterval(refreshDashboardFeed, DASHBOARD_FEED_REFRESH_MS);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   wireTrendControls();
   loadAdminDashboard();
   startDashboardTelemetryRefresh();
+  startDashboardFeedRefresh();
+  document.getElementById('refreshAdminOpsFeedBtn')?.addEventListener('click', refreshDashboardFeed);
 });
 
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) refreshDashboardTelemetry();
+  if (!document.hidden) {
+    refreshDashboardTelemetry();
+    refreshDashboardFeed();
+  }
 });
 
 window.addEventListener('beforeunload', () => {
   if (dashboardTelemetryRefreshTimer) window.clearInterval(dashboardTelemetryRefreshTimer);
+  if (dashboardFeedRefreshTimer) window.clearInterval(dashboardFeedRefreshTimer);
 });
