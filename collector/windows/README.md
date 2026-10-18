@@ -62,11 +62,12 @@ Then revoke the matching portal entry. The encrypted credential and local status
 
 ## Build and release
 
-The installer source is in `collector/windows/installer`. Build the production Windows x64 resource with:
+The installer source is in `collector/windows/installer`. Build the production Windows x64 release with:
 
 ```powershell
 dotnet publish collector/windows/installer/AITSMCollectorSetup.csproj -c Release -r win-x64 --self-contained true -o collector/windows/installer/publish
-Copy-Item collector/windows/installer/publish/AITSMCollectorSetup.exe src/main/resources/collector/AITSMCollectorSetup.exe -Force
+Get-FileHash collector/windows/installer/publish/AITSMCollectorSetup.exe -Algorithm SHA256
+gh release create collector-vX.Y.Z "collector/windows/installer/publish/AITSMCollectorSetup.exe#AITSMCollectorSetup.exe" --target beta
 ```
 
-The packaged EXE is served only after an authenticated, CSRF-protected request whose enrollment code belongs to the requesting account. Deployment must apply migrations through `V015__ticket_transition_notes.sql` before starting this application revision.
+Set `COLLECTOR_INSTALLER_URL` to the immutable release asset and pin its checksum in `COLLECTOR_INSTALLER_SHA256`. The portal downloads and verifies the release once per instance, then serves it only after an authenticated, CSRF-protected request whose enrollment code belongs to the requesting account. Deployment must apply every migration listed in `db/migrations/index.txt` before receiving traffic.

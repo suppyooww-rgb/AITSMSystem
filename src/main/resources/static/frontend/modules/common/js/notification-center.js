@@ -147,7 +147,11 @@
     markAll.textContent = center.markingAll ? 'Marking…' : 'Mark all read';
     markAll.disabled = center.markingAll || !center.items.some((item) => !item.isRead);
     markAll.addEventListener('click', () => markAllRead(center));
-    toolbar.append(heading, markAll);
+    const viewAll = document.createElement('a');
+    viewAll.className = 'btn btn-ghost notification-view-all';
+    viewAll.href = '/notifications';
+    viewAll.textContent = 'View all';
+    toolbar.append(heading, viewAll, markAll);
     center.status = document.createElement('p');
     center.status.className = 'small notification-status';
     center.status.setAttribute('role', 'status');
@@ -161,18 +165,18 @@
       center.list.appendChild(empty);
       return;
     }
-    center.items.slice(0, 12).forEach((item) => center.list.appendChild(notificationButton(center, item)));
+    center.items.forEach((item) => center.list.appendChild(notificationButton(center, item)));
   }
 
   async function refresh(center, { silent = false } = {}) {
     if (center.loading) return center.loading;
     center.loading = (async () => {
       try {
-        const [items, count] = await Promise.all([
-          request('/api/notifications'),
+        const [page, count] = await Promise.all([
+          request('/api/notifications?page=1&pageSize=12'),
           request('/api/notifications/unread-count')
         ]);
-        center.items = Array.isArray(items) ? items : [];
+        center.items = Array.isArray(page?.items) ? page.items : [];
         render(center);
         updateBadge(center, count.unreadCount);
       } catch (error) {

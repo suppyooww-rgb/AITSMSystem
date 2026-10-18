@@ -8,6 +8,7 @@ concurrency:
   cancel-in-progress: true
 permissions:
   contents: read
+  id-token: write
 jobs:
   test-and-scan:
     runs-on: ubuntu-latest
@@ -51,3 +52,78 @@ jobs:
           name: aitsm-${{ github.sha }}
           path: build/libs/aitsm-all.jar
           if-no-files-found: error
+
+  deploy:
+    if: github.event_name == 'push'
+    needs: test-and-scan
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.ref_name == 'main' && 'production' || 'beta' }}
+    env:
+      PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      REGION: ${{ vars.GCP_REGION }}
+      REPOSITORY: ${{ vars.GCP_ARTIFACT_REPOSITORY }}
+      SERVICE_NAME: ${{ vars.SERVICE_NAME }}
+      RETENTION_DAYS: ${{ vars.NOTIFICATION_RETENTION_DAYS }}
+      COLLECTOR_URL: ${{ vars.COLLECTOR_INSTALLER_URL }}
+      COLLECTOR_SHA256: ${{ vars.COLLECTOR_INSTALLER_SHA256 }}
+    steps:
+      - uses: actions/checkout@v6
+      - id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v3
+      - name: Validate deployment configuration
+        run: |
+          test -n "$PROJECT_ID"
+          test -n "$REGION"
+          test -n "$REPOSITORY"
+          test -n "$SERVICE_NAME"
+          test -n "$RETENTION_DAYS"
+          test -n "$COLLECTOR_URL"
+          test -n "$COLLECTOR_SHA256"
+      - name: Build and publish immutable image
+        id: image
+        run: |
+          IMAGE="$REGION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/aitsm:$GITHUB_SHA"
+          gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
+          docker build --tag "$IMAGE" .
+          docker push "$IMAGE"
+          echo "uri=$IMAGE" >> "$GITHUB_OUTPUT"
+      - name: Deploy no-traffic candidate and run migrations
+        id: candidate
+        run: |
+          CURRENT_REVISION="$(gcloud run services describe "$SERVICE_NAME" --project "$PROJECT_ID" --region "$REGION" --format='value(status.latestReadyRevisionName)')"
+          gcloud run deploy "$SERVICE_NAME" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --image "${{ steps.image.outputs.uri }}" \
+            --no-traffic \
+            --tag candidate \
+            --update-env-vars "DB_MIGRATE_ON_START=true,DB_MIGRATION_BASELINE=16,NOTIFICATION_RETENTION_DAYS=$RETENTION_DAYS,COLLECTOR_INSTALLER_URL=$COLLECTOR_URL,COLLECTOR_INSTALLER_SHA256=$COLLECTOR_SHA256" \
+            --labels "managed-by=github-actions,git-sha=$GITHUB_SHA" \
+            --quiet
+          NEW_REVISION="$(gcloud run services describe "$SERVICE_NAME" --project "$PROJECT_ID" --region "$REGION" --format='value(status.latestCreatedRevisionName)')"
+          CANDIDATE_URL="$(gcloud run services describe "$SERVICE_NAME" --project "$PROJECT_ID" --region "$REGION" --format=json | jq -r '.status.traffic[] | select(.tag == "candidate") | .url')"
+          test -n "$CURRENT_REVISION"
+          test -n "$NEW_REVISION"
+          test -n "$CANDIDATE_URL"
+          curl --fail --show-error --silent --retry 8 --retry-all-errors --retry-delay 5 "$CANDIDATE_URL/api/health"
+          echo "previous=$CURRENT_REVISION" >> "$GITHUB_OUTPUT"
+          echo "revision=$NEW_REVISION" >> "$GITHUB_OUTPUT"
+      - name: Promote candidate with rollback check
+        run: |
+          gcloud run services update-traffic "$SERVICE_NAME" --project "$PROJECT_ID" --region "$REGION" --to-revisions "${{ steps.candidate.outputs.revision }}=100" --quiet
+          SERVICE_URL="$(gcloud run services describe "$SERVICE_NAME" --project "$PROJECT_ID" --region "$REGION" --format='value(status.url)')"
+          if ! curl --fail --show-error --silent --retry 5 --retry-all-errors --retry-delay 5 "$SERVICE_URL/api/health"; then
+            gcloud run services update-traffic "$SERVICE_NAME" --project "$PROJECT_ID" --region "$REGION" --to-revisions "${{ steps.candidate.outputs.previous }}=100" --quiet
+            echo "Health verification failed; traffic was restored to ${{ steps.candidate.outputs.previous }}" >&2
+            exit 1
+          fi
+          echo "### Deployment complete" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Environment: ${{ github.ref_name == 'main' && 'production' || 'beta' }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Service: $SERVICE_NAME" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Revision: ${{ steps.candidate.outputs.revision }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Health: $SERVICE_URL/api/health" >> "$GITHUB_STEP_SUMMARY"
