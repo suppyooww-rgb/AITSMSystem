@@ -15,3 +15,4 @@ V014__secure_ollama_ai_bridge.sql
 V015__ticket_transition_notes.sql
 V016__atomic_ticket_ownership.sql
 V017__notification_history_pagination.sql
+V018__repair_skipped_release_schema.sql
