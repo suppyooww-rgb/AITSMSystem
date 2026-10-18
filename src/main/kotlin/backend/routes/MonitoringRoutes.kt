@@ -19,6 +19,7 @@ import backend.services.CollectorRateLimitException
 import backend.services.InventoryService
 import backend.services.InvalidCollectorTokenException
 import backend.services.MonitoringService
+import backend.services.CollectorInstallerProvider
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -81,8 +82,10 @@ fun Route.monitoringRoutes(
             if (request.repairCollectorId != null && !service.canRepairCollector(request.repairCollectorId, actorId, call.userRole())) {
                 return@post call.respond(HttpStatusCode.Forbidden, ApiErrorResponse(403, "Collector repair target is unavailable"))
             }
-            val executable = Thread.currentThread().contextClassLoader.getResourceAsStream("collector/AITSMCollectorSetup.exe")
-                ?: return@post call.respond(HttpStatusCode.ServiceUnavailable, ApiErrorResponse(503, "Windows collector installer is not included in this release"))
+            val executable = runCatching { CollectorInstallerProvider.openStream() }.getOrElse {
+                call.application.environment.log.error("Collector installer is unavailable", it)
+                return@post call.respond(HttpStatusCode.ServiceUnavailable, ApiErrorResponse(503, "Windows collector installer is temporarily unavailable"))
+            }
             val origin = Env.get("APP_BASE_URL")?.trim()?.removeSuffix("/")
                 ?: return@post call.respond(HttpStatusCode.ServiceUnavailable, ApiErrorResponse(503, "Application base URL is not configured"))
             val encodedOrigin = Base64.getUrlEncoder().withoutPadding().encodeToString(origin.toByteArray(Charsets.UTF_8))

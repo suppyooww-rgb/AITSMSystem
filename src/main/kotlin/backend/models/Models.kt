@@ -359,6 +359,15 @@ data class Notification(
     val createdAt: String,
     val readAt: String? = null
 )
+@Serializable
+data class NotificationPage(
+    val items: List<Notification>,
+    val page: Int,
+    val pageSize: Int,
+    val total: Long,
+    val totalPages: Int,
+    val hasNext: Boolean
+)
 @Serializable data class SLA(val id: Int, val priority: String, val responseTime: Int, val resolutionTime: Int)
 @Serializable data class SLAUpdateRequest(val responseTime: Int, val resolutionTime: Int)
 @Serializable data class SLAAnalytics(

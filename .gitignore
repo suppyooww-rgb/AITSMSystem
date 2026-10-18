@@ -12,6 +12,7 @@ build/
 output/
 tmp/
 uploads/
+src/main/resources/collector/AITSMCollectorSetup.exe
 
 ### STS ###
 .apt_generated

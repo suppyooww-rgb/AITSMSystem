@@ -23,6 +23,11 @@ application {
     mainClass = "io.ktor.server.netty.EngineMain"
 }
 
+tasks.processResources {
+    from("db/migrations") { into("db/migrations") }
+    from("db/schema.sql") { into("db") }
+}
+
 dependencyLocking {
     lockAllConfigurations()
 }

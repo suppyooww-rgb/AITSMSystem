@@ -661,7 +661,7 @@ async function loadAdminDashboard() {
       window.aitsmFetchAllPaginated('/api/tickets'),
       fetchJsonOrThrow('/api/monitoring/summary'),
       fetchJsonOrThrow('/api/monitoring/lan-devices'),
-      fetchJsonOrThrow('/api/notifications'),
+      fetchJsonOrThrow('/api/notifications?page=1&pageSize=8'),
       fetchJsonOrThrow('/api/inventory/stats'),
       fetchJsonOrThrow('/api/sla/analytics')
     ]);
@@ -710,8 +710,8 @@ async function refreshDashboardFeed() {
   dashboardFeedRefreshInFlight = true;
   updateAdminOpsFeedStatus('Refreshing…');
   try {
-    const notifications = await fetchJsonOrThrow('/api/notifications');
-    dashboardState.notifications = Array.isArray(notifications) ? notifications : [];
+    const notifications = await fetchJsonOrThrow('/api/notifications?page=1&pageSize=8');
+    dashboardState.notifications = Array.isArray(notifications?.items) ? notifications.items : [];
     renderAdminOpsFeed(dashboardState.lanDevices, dashboardState.notifications);
     updateAdminOpsFeedStatus(`Updated ${new Date().toLocaleTimeString()}`);
   } catch {

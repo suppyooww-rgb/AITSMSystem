@@ -912,11 +912,13 @@ body.sidebar-hidden .sidebar {
   background: #020b2a;
   border-bottom: 1px solid #1f325f;
 }
-.admin-header-menu .notification-mark-all {
+.admin-header-menu .notification-mark-all,
+.admin-header-menu .notification-view-all {
   width: auto;
   padding: 6px 9px;
   font-size: 12px;
 }
+.notification-toolbar > strong { margin-right: auto; }
 .notification-entry {
   display: grid !important;
   grid-template-columns: 38px minmax(0, 1fr);
@@ -941,6 +943,7 @@ body.sidebar-hidden .sidebar {
 .notification-entry-copy time { color: #94a3b8; font-size: 11px; }
 .notification-status,
 .notification-empty { margin: 0; padding: 10px 12px; }
+.notification-item.is-unread { border-color: #93c5fd; background: #eff6ff; }
 
 @media (max-width: 520px) {
   #adminNotifMenu,

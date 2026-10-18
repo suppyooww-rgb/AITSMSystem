@@ -3,17 +3,22 @@ package backend.services
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
-import kotlin.test.assertContentEquals
+import kotlin.test.assertContains
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class CollectorInstallerContractTest {
-    @Test fun `windows installer is packaged as a self contained executable`() {
-        val installer = Path.of("src/main/resources/collector/AITSMCollectorSetup.exe")
-        assertTrue(Files.size(installer) > 1_000_000)
-        Files.newInputStream(installer).use { input ->
-            assertContentEquals(byteArrayOf('M'.code.toByte(), 'Z'.code.toByte()), input.readNBytes(2))
-        }
+    @Test fun `windows installer is delivered from a pinned verified release`() {
+        val provider = Files.readString(Path.of("src/main/kotlin/backend/services/CollectorInstallerProvider.kt"))
+        val route = Files.readString(Path.of("src/main/kotlin/backend/routes/MonitoringRoutes.kt"))
+        val example = Files.readString(Path.of(".env.example"))
+        val gitignore = Files.readString(Path.of(".gitignore"))
+        assertContains(provider, "COLLECTOR_INSTALLER_URL")
+        assertContains(provider, "COLLECTOR_INSTALLER_SHA256")
+        assertContains(provider, "checksum verification failed")
+        assertContains(route, "CollectorInstallerProvider.openStream()")
+        assertContains(example, "releases/download/collector-v1.3.1/AITSMCollectorSetup.exe")
+        assertContains(gitignore, "src/main/resources/collector/AITSMCollectorSetup.exe")
     }
 
     @Test fun `installer protects credentials and installs an automatic service`() {

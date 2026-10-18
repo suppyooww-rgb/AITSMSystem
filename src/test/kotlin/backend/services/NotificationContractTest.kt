@@ -6,6 +6,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertContains
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -50,6 +51,28 @@ class NotificationContractTest {
         assertContains(service, "NotificationsTable.isRead eq false")
         assertContains(routes, "service.belongsToUser(userId, id)")
         assertContains(routes, "HttpStatusCode.NotFound")
+    }
+
+    @Test fun `notification history is paginated and has environment specific retention`() {
+        val routes = Files.readString(root.resolve("kotlin/backend/routes/NotificationRoutes.kt"))
+        val client = Files.readString(root.resolve("resources/static/frontend/modules/common/js/notification-center.js"))
+        val dashboard = Files.readString(root.resolve("resources/static/frontend/dashboard-admin/js/dashboard.js"))
+        assertContains(routes, "pageSize")
+        assertContains(routes, "service.page(userId, page, pageSize, status, type)")
+        assertContains(client, "/api/notifications?page=1&pageSize=12")
+        assertContains(client, "href = '/notifications'")
+        assertContains(dashboard, "/api/notifications?page=1&pageSize=8")
+        assertEquals(30L, notificationRetentionDays("beta", null))
+        assertEquals(90L, notificationRetentionDays("production", null))
+        assertEquals(45L, notificationRetentionDays("production", "45"))
+    }
+
+    @Test fun `ticket event deduplication remains recipient specific for multiple admins`() {
+        val firstAdmin = ticketNotificationEventKey(14, "ticket_claimed", "claim-1", 2)
+        val secondAdmin = ticketNotificationEventKey(14, "ticket_claimed", "claim-1", 3)
+        assertFalse(firstAdmin == secondAdmin)
+        assertContains(firstAdmin, ":2")
+        assertContains(secondAdmin, ":3")
     }
 
     @Test fun `both shells use one accessible persistent notification client`() {

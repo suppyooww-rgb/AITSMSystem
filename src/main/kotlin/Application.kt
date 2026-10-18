@@ -1,6 +1,7 @@
 package com.aitsm
 
 import backend.config.DatabaseFactory
+import backend.config.DatabaseMigrator
 import backend.config.Env
 import backend.config.ServiceContainer
 import backend.models.ApiErrorResponse
@@ -146,6 +147,7 @@ fun Application.module() {
         }
     }
 
+    if (Env.get("DB_MIGRATE_ON_START").equals("true", ignoreCase = true)) DatabaseMigrator.migrate()
     DatabaseFactory.init()
     val container = ServiceContainer(this)
     configureSecurityBoundary(container.sessionService)
@@ -153,6 +155,7 @@ fun Application.module() {
     container.aiChatService.startupLog()
     container.slaService.seedDefaults()
     container.slaAutomationService.start(this)
+    container.notificationService.startRetentionCleanup(this)
 
     val superAdminEmail = Env.get("SUPERADMIN_EMAIL")?.takeIf { it.isNotBlank() }
     val superAdminPassword = Env.get("SUPERADMIN_PASSWORD")?.takeIf { it.isNotBlank() }
@@ -195,6 +198,7 @@ fun Application.module() {
             "/settings" to "settings/html/settings.html",
             "/profile" to "profile/html/profile.html",
             "/security" to "security/html/security.html",
+            "/notifications" to "notifications/html/notifications.html",
             "/user-management" to "user-management/html/user-management.html",
             "/ai-assistant" to "ai-assistant/html/ai-assistant.html",
             "/colleagues" to "colleagues/html/colleagues.html"
