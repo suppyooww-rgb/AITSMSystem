@@ -3,6 +3,8 @@ FROM eclipse-temurin:21-jdk-alpine AS build
 WORKDIR /workspace
 COPY gradle ./gradle
 COPY gradlew gradlew.bat build.gradle.kts settings.gradle.kts gradle.properties gradle.lockfile ./
+COPY .env.example .gitignore ./
+COPY .github ./.github
 RUN chmod +x gradlew
 COPY src ./src
 COPY db ./db
