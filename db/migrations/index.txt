@@ -16,3 +16,5 @@ V015__ticket_transition_notes.sql
 V016__atomic_ticket_ownership.sql
 V017__notification_history_pagination.sql
 V018__repair_skipped_release_schema.sql
+V019__repair_legacy_collector_and_sla_schema.sql
+V020__repair_legacy_collector_enrollment_schema.sql
