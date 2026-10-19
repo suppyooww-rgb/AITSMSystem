@@ -33,6 +33,9 @@ jobs:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         run: test -n "$NVD_API_KEY"
       - name: Dependency vulnerability scan
+        # The NVD feed is external. Bound it so a stalled feed cannot leave a
+        # release indefinitely in progress; a timeout still fails the release.
+        timeout-minutes: 15
         env:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         run: ./gradlew dependencyCheckAnalyze
