@@ -53,7 +53,8 @@ Then revoke the matching portal entry. The encrypted credential and local status
 
 - Allow outbound TCP 443 to the AITSM hostname. No inbound port or router change is required.
 - For AI, allow the Windows service to reach local `127.0.0.1:11434`; do not publish that port to the LAN or internet.
-- Company/LAN discovery is restricted to the private CIDRs configured in **Settings → Asset Detection Configuration**.
+- Company/LAN discovery is restricted to the private CIDRs configured in **Settings → Asset Detection Configuration**. Normal reports use local neighbor data only. When an administrator queues LAN discovery, a Company/LAN collector also performs a bounded routed discovery job: it sends ICMP reachability checks and optional reverse-DNS lookups only to the server-provided approved ranges. The job is limited to 1,024 target addresses, so use specific floor or VLAN prefixes rather than broad ranges such as `10.`.
+- Routed discovery requires the institution network to permit the collector host to reach the approved remote subnet. A discovered peer indicates network reachability only; full hardware and resource telemetry still requires that device to run its own collector.
 - HTTP 401 in the local log means the credential was revoked or rejected. Revoke/uninstall it and download a replacement.
 - A Windows clock that is badly out of sync no longer blocks enrollment data; the server safely substitutes its authoritative receipt time while preserving the reported device data.
 - If the EXE says the enrollment is expired or already used, download a fresh installer.
