@@ -128,18 +128,47 @@ internal static class Program
     private static (string BaseUrl, string Code, string? RepairCollectorId) ReadBootstrapFromFilename(string executable)
     {
         var name = Path.GetFileNameWithoutExtension(executable);
-        var parts = name.Split("--", StringSplitOptions.None);
-        if (parts.Length is not (3 or 4) || !parts[0].Equals("AITSMCollectorSetup", StringComparison.OrdinalIgnoreCase))
+        const string prefix = "AITSMCollectorSetup--";
+        if (!name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("This installer is missing its enrollment information. Download a fresh copy from AITSM.");
-        var origin = Encoding.UTF8.GetString(Convert.FromBase64String(PadBase64(parts[1].Replace('-', '+').Replace('_', '/'))));
-        if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps || uri.PathAndQuery != "/")
-            throw new InvalidOperationException("The AITSM address embedded in this installer is invalid.");
-        var repairCollectorId = parts.Length == 4 && !parts[3].Equals("new", StringComparison.OrdinalIgnoreCase)
-            ? parts[3]
-            : null;
+        var remaining = name[prefix.Length..];
+        var finalSeparator = remaining.LastIndexOf("--", StringComparison.Ordinal);
+        if (finalSeparator < 1) throw new InvalidOperationException("This installer is missing its enrollment information. Download a fresh copy from AITSM.");
+
+        var repairSegment = remaining[(finalSeparator + 2)..];
+        var repairCollectorId = repairSegment.Equals("new", StringComparison.OrdinalIgnoreCase) ? null : repairSegment;
         if (repairCollectorId != null && !Guid.TryParse(repairCollectorId, out _))
             throw new InvalidOperationException("The collector repair identity embedded in this installer is invalid.");
-        return (origin.TrimEnd('/'), parts[2], repairCollectorId);
+
+        var originAndCode = remaining[..finalSeparator];
+        for (var separator = originAndCode.IndexOf("--", StringComparison.Ordinal); separator >= 0; separator = originAndCode.IndexOf("--", separator + 2, StringComparison.Ordinal))
+        {
+            var encodedOrigin = originAndCode[..separator];
+            var code = originAndCode[(separator + 2)..];
+            if (!IsEnrollmentCode(code) || !TryDecodeOrigin(encodedOrigin, out var origin)) continue;
+            return (origin, code, repairCollectorId);
+        }
+        throw new InvalidOperationException("This installer is missing its enrollment information. Download a fresh copy from AITSM.");
+    }
+
+    private static bool TryDecodeOrigin(string encodedOrigin, out string origin)
+    {
+        origin = "";
+        try
+        {
+            var decoded = Encoding.UTF8.GetString(Convert.FromBase64String(PadBase64(encodedOrigin.Replace('-', '+').Replace('_', '/'))));
+            if (!Uri.TryCreate(decoded, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps || uri.PathAndQuery != "/") return false;
+            origin = decoded.TrimEnd('/');
+            return true;
+        }
+        catch (FormatException) { return false; }
+    }
+
+    private static bool IsEnrollmentCode(string code)
+    {
+        var separator = code.IndexOf('.');
+        return separator > 0 && Guid.TryParse(code[..separator], out _) &&
+            code[(separator + 1)..].Length > 0 && code[(separator + 1)..].All(character => char.IsAsciiLetterOrDigit(character) || character is '-' or '_');
     }
 
     private static string PadBase64(string value) => value.PadRight(value.Length + ((4 - value.Length % 4) % 4), '=');
@@ -266,6 +295,7 @@ internal static class CollectorLoop
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
         http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", config.Token);
         string? discoveryId = null;
+        var discoveryCidrs = Array.Empty<string>();
         if (config.Scope == "LAN")
         {
             using var command = await http.GetAsync($"{config.BaseUrl}/api/monitoring/collector/commands", token);
@@ -273,12 +303,24 @@ internal static class CollectorLoop
             {
                 using var document = JsonDocument.Parse(await command.Content.ReadAsStringAsync(token));
                 discoveryId = document.RootElement.TryGetProperty("requestId", out var id) ? id.GetString() : null;
+                if (document.RootElement.TryGetProperty("privateCidrs", out var cidrs) && cidrs.ValueKind == JsonValueKind.Array)
+                {
+                    discoveryCidrs = cidrs.EnumerateArray()
+                        .Where(value => value.ValueKind == JsonValueKind.String)
+                        .Select(value => value.GetString())
+                        .Where(value => !string.IsNullOrWhiteSpace(value))
+                        .Cast<string>()
+                        .ToArray();
+                }
             }
         }
         var devices = new List<object> { InventoryReader.ReadHost() };
-        if (config.Scope == "LAN") devices.AddRange(InventoryReader.ReadPeers(config.PrivateCidrs));
+        var discovery = config.Scope == "LAN"
+            ? await InventoryReader.ReadPeersAsync(config.PrivateCidrs, discoveryId == null ? null : discoveryCidrs, token)
+            : PeerDiscoveryResult.Empty;
+        devices.AddRange(discovery.Devices);
         var payload = JsonSerializer.Serialize(new {
-            measuredAt = DateTimeOffset.UtcNow, devices, discoveryRequestId = discoveryId, discoveryError = (string?)null,
+            measuredAt = DateTimeOffset.UtcNow, devices, discoveryRequestId = discoveryId, discoveryError = discovery.Error,
             agentVersion = Program.AgentVersion, serviceStartedAt, previousError, consecutiveFailures = 0
         }, Program.JsonOptions());
         using var response = await http.PostAsync($"{config.BaseUrl}/api/monitoring/collector/reports", new StringContent(payload, Encoding.UTF8, "application/json"), token);
@@ -414,8 +456,16 @@ internal static class AiBridgeLoop
     private static async Task Delay(int seconds, CancellationToken token) { try { await Task.Delay(TimeSpan.FromSeconds(seconds), token); } catch (OperationCanceledException) { } }
 }
 
+internal sealed record PeerDiscoveryResult(IReadOnlyList<object> Devices, string? Error)
+{
+    internal static readonly PeerDiscoveryResult Empty = new([], null);
+}
+
 internal static class InventoryReader
 {
+    private const int PingTimeoutMilliseconds = 750;
+    private const int ScanConcurrency = 24;
+    private const int MaximumScanTargets = 1024;
     public static object ReadHost()
     {
         var computer = First("SELECT Manufacturer,Model,TotalPhysicalMemory,Domain,PartOfDomain FROM Win32_ComputerSystem");
@@ -450,8 +500,10 @@ internal static class InventoryReader
         };
     }
 
-    public static IEnumerable<object> ReadPeers(string[] cidrs)
+    public static async Task<PeerDiscoveryResult> ReadPeersAsync(string[] cidrs, string[]? activeScanCidrs, CancellationToken cancellationToken)
     {
+        var peers = new List<object>();
+        var knownIps = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var output = Run("arp.exe", "-a");
         var regex = new Regex(@"^\s*(?<ip>\d{1,3}(?:\.\d{1,3}){3})\s+(?<mac>[0-9a-f-]{17})\s+", RegexOptions.IgnoreCase | RegexOptions.Multiline);
         foreach (Match match in regex.Matches(output))
@@ -459,8 +511,109 @@ internal static class InventoryReader
             var ip = match.Groups["ip"].Value;
             if (!IPAddress.TryParse(ip, out var address) || !IsPrivate(address) || !cidrs.Any(c => InCidr(address, c))) continue;
             string hostname; try { hostname = Dns.GetHostEntry(address).HostName; } catch { hostname = "LAN peer"; }
-            yield return new { deviceKey = $"peer:{ip}", hostname, ipAddress = ip, macAddress = match.Groups["mac"].Value, osDetails = (string?)null, reachable = true, telemetryAvailable = false, cpuUsagePercent = (double?)null, memoryUsagePercent = (double?)null, storageTotalBytes = (long?)null, storageUsedBytes = (long?)null, measurementAt = DateTimeOffset.UtcNow, inventory = (object?)null };
+            peers.Add(BuildPeer(ip, hostname, match.Groups["mac"].Value));
+            knownIps.Add(ip);
         }
+
+        if (activeScanCidrs == null) return new PeerDiscoveryResult(peers, null);
+        if (activeScanCidrs.Length == 0) return new PeerDiscoveryResult(peers, "No Superadmin-approved network prefixes are configured for routed discovery.");
+
+        try
+        {
+            var targets = BuildScanTargets(activeScanCidrs);
+            using var gate = new SemaphoreSlim(ScanConcurrency);
+            var probes = targets.Select(address => ProbeAsync(address, gate, cancellationToken));
+            var discovered = await Task.WhenAll(probes);
+            foreach (var peer in discovered.Where(peer => peer != null).Cast<DiscoveredPeer>())
+            {
+                if (knownIps.Add(peer.IpAddress)) peers.Add(BuildPeer(peer.IpAddress, peer.Hostname, null));
+            }
+            return new PeerDiscoveryResult(peers, null);
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception error)
+        {
+            return new PeerDiscoveryResult(peers, SafeDiscoveryError(error));
+        }
+    }
+
+    private static object BuildPeer(string ipAddress, string hostname, string? macAddress) => new {
+        deviceKey = $"peer:{ipAddress}", hostname, ipAddress, macAddress, osDetails = (string?)null,
+        reachable = true, telemetryAvailable = false, cpuUsagePercent = (double?)null, memoryUsagePercent = (double?)null,
+        storageTotalBytes = (long?)null, storageUsedBytes = (long?)null, measurementAt = DateTimeOffset.UtcNow, inventory = (object?)null
+    };
+
+    private sealed record DiscoveredPeer(string IpAddress, string Hostname);
+
+    private static async Task<DiscoveredPeer?> ProbeAsync(IPAddress address, SemaphoreSlim gate, CancellationToken cancellationToken)
+    {
+        await gate.WaitAsync(cancellationToken);
+        try
+        {
+            using var ping = new Ping();
+            var reply = await ping.SendPingAsync(address, PingTimeoutMilliseconds);
+            if (reply.Status != IPStatus.Success) return null;
+            var hostname = "LAN peer";
+            try
+            {
+                var entry = await Dns.GetHostEntryAsync(address).WaitAsync(TimeSpan.FromMilliseconds(PingTimeoutMilliseconds), cancellationToken);
+                if (!string.IsNullOrWhiteSpace(entry.HostName)) hostname = entry.HostName;
+            }
+            catch (OperationCanceledException) { throw; }
+            catch { }
+            return new DiscoveredPeer(address.ToString(), hostname);
+        }
+        catch (OperationCanceledException) { throw; }
+        catch { return null; }
+        finally { gate.Release(); }
+    }
+
+    private static IReadOnlyList<IPAddress> BuildScanTargets(IEnumerable<string> cidrs)
+    {
+        var targets = new List<IPAddress>();
+        var seen = new HashSet<uint>();
+        foreach (var cidr in cidrs)
+        {
+            if (!TryParseCidr(cidr, out var network, out var prefix)) continue;
+            var size = 1UL << (32 - prefix);
+            var start = prefix <= 30 ? 1UL : 0UL;
+            var endExclusive = prefix <= 30 ? size - 1UL : size;
+            if (endExclusive <= start) continue;
+            if ((ulong)targets.Count + (endExclusive - start) > MaximumScanTargets)
+                throw new InvalidOperationException($"Routed discovery is limited to {MaximumScanTargets} target addresses per queued scan. Narrow the approved prefixes before retrying.");
+            for (var offset = start; offset < endExclusive; offset++)
+            {
+                var raw = network + (uint)offset;
+                var address = ToAddress(raw);
+                if (IsPrivate(address) && seen.Add(raw)) targets.Add(address);
+            }
+        }
+        if (targets.Count == 0) throw new InvalidOperationException("No valid private target addresses were supplied for routed discovery.");
+        return targets;
+    }
+
+    private static bool TryParseCidr(string cidr, out uint network, out int prefix)
+    {
+        network = 0; prefix = 0;
+        var parts = cidr.Split('/');
+        if (parts.Length != 2 || !IPAddress.TryParse(parts[0], out var address) || !int.TryParse(parts[1], out prefix) || prefix is < 0 or > 32 || address.AddressFamily != AddressFamily.InterNetwork) return false;
+        var raw = ToUInt32(address);
+        var mask = prefix == 0 ? 0u : uint.MaxValue << (32 - prefix);
+        network = raw & mask;
+        return true;
+    }
+
+    private static uint ToUInt32(IPAddress address)
+    {
+        var bytes = address.GetAddressBytes();
+        return ((uint)bytes[0] << 24) | ((uint)bytes[1] << 16) | ((uint)bytes[2] << 8) | bytes[3];
+    }
+
+    private static IPAddress ToAddress(uint value) => new(new[] { (byte)(value >> 24), (byte)(value >> 16), (byte)(value >> 8), (byte)value });
+    private static string SafeDiscoveryError(Exception error)
+    {
+        var message = Regex.Replace(error.Message, "[\\r\\n]+", " ").Trim();
+        return message.Length <= 500 ? message : message[..500];
     }
     private static Dictionary<string, object?> First(string query) => All(query).FirstOrDefault() ?? [];
     private static List<Dictionary<string, object?>> All(string query)
