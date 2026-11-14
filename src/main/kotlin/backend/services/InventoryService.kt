@@ -9,6 +9,7 @@ import backend.models.InventoryUpsertResponse
 import backend.models.PaginatedResponse
 import backend.models.PaginationMeta
 import backend.queries.InventoryQueries
+import backend.repository.AuditRepository
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.net.InetAddress
@@ -17,7 +18,8 @@ import java.time.format.DateTimeFormatter
 
 class InventoryService(
     private val inventoryQueries: InventoryQueries,
-    private val assetDetectionService: AssetDetectionService
+    private val assetDetectionService: AssetDetectionService,
+    private val audit: AuditRepository
 ) {
     private val staleMinutes: Long = 30
     private val statusFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
@@ -167,6 +169,16 @@ class InventoryService(
         if (getAssetDetails(id) == null) return null
         inventoryQueries.updateStatus(id, normalizeStatus(status, null)) ?: return null
         return getAssetDetails(id)
+    }
+
+    fun deleteAsset(id: Int, actorId: Int?): Boolean {
+        val asset = inventoryQueries.getById(id) ?: return false
+        val deleted = inventoryQueries.delete(id)
+        if (deleted) {
+            val identity = asset.fullDeviceName ?: asset.hostname ?: asset.ipAddress ?: "unknown device"
+            audit.log(actorId, "Permanently deleted inventory asset #$id ($identity)", "inventory_assets", target = id.toString())
+        }
+        return deleted
     }
 
     fun exportAssetsCsv(filters: InventoryFilters): String {

@@ -8,6 +8,7 @@ import backend.models.InventoryUpsertDetectedRequest
 import backend.models.UserRole
 import backend.security.requireRole
 import backend.security.requireReauthentication
+import backend.security.userId
 import backend.services.ReauthScope
 import backend.services.ReauthenticationService
 import backend.services.InventoryService
@@ -18,6 +19,7 @@ import io.ktor.server.response.respond
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
+import io.ktor.server.routing.delete
 import io.ktor.server.routing.patch
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
@@ -102,6 +104,17 @@ fun Route.inventoryRoutes(inventoryService: InventoryService, reauthentication: 
             val updated = inventoryService.updateStatus(id, payload.status)
                 ?: return@patch call.respond(HttpStatusCode.NotFound, mapOf("error" to "Asset not found"))
             call.respond(updated)
+        }
+
+        delete("/{id}") {
+            if (!call.requireRole(UserRole.SUPERADMIN)) return@delete
+            if (!call.requireReauthentication(reauthentication, ReauthScope.INVENTORY_DELETE)) return@delete
+            val id = call.parameters["id"]?.toIntOrNull()
+                ?: return@delete call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid asset id"))
+            if (!inventoryService.deleteAsset(id, call.userId())) {
+                return@delete call.respond(HttpStatusCode.NotFound, mapOf("error" to "Asset not found"))
+            }
+            call.respond(mapOf("message" to "Inventory asset permanently deleted"))
         }
     }
 }

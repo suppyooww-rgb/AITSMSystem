@@ -83,7 +83,10 @@
             <h3 id='inventoryDetailTitle' class='section-title'>Asset Detail</h3>
             <p id='inventoryDetailSubtitle' class='section-subtitle'></p>
           </div>
-          <button class='btn btn-ghost' type='button' onclick='closeInventoryDetail()'>Close</button>
+          <div class='inline-actions'>
+            <button id='inventoryDeleteBtn' class='btn btn-danger hidden' type='button'>Permanently Delete</button>
+            <button class='btn btn-ghost' type='button' onclick='closeInventoryDetail()'>Close</button>
+          </div>
         </div>
 
         <section id='inventoryDetailSummary' class='grid stats inventory-summary-cards'></section>
