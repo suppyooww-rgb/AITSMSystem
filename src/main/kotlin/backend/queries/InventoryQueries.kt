@@ -12,6 +12,7 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.isNotNull
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.less
 import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
@@ -334,6 +335,13 @@ class InventoryQueries {
             it[InventoryAssetsTable.updatedAt] = LocalDateTime.now()
         }
         getById(id)
+    }
+
+    fun delete(id: Int): Boolean = transaction {
+        // Remove snapshots explicitly so this remains correct even if a legacy database
+        // was created without the schema's ON DELETE CASCADE constraint.
+        InventoryAssetSnapshotsTable.deleteWhere { InventoryAssetSnapshotsTable.assetId eq id }
+        InventoryAssetsTable.deleteWhere { InventoryAssetsTable.id eq id } > 0
     }
 
     fun saveSnapshot(assetId: Int, payload: String, source: String) {

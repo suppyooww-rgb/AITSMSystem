@@ -13,7 +13,7 @@ import java.util.UUID
 
 enum class ReauthScope(val wireValue: String) {
     ADMIN_ACCESS("admin-access"), MFA_CHANGE("mfa-change"), SECURITY_CONFIG("security-config"),
-    SENSITIVE_EXPORT("sensitive-export"), ACCOUNT_DELETE("account-delete"), RECOVERY_CODES("recovery-codes");
+    SENSITIVE_EXPORT("sensitive-export"), ACCOUNT_DELETE("account-delete"), INVENTORY_DELETE("inventory-delete"), RECOVERY_CODES("recovery-codes");
     companion object { fun parse(value: String): ReauthScope? = entries.firstOrNull { it.wireValue == value } }
 }
 

@@ -280,6 +280,10 @@ function renderInventoryDetailGroups(asset) {
   ]);
 }
 
+function isInventorySuperAdmin() {
+  return String(window.currentUser?.role || '').toUpperCase() === 'SUPERADMIN';
+}
+
 async function openInventoryDetail(id) {
   const modal = document.getElementById('inventoryDetailModal');
   if (!modal) return;
@@ -287,11 +291,13 @@ async function openInventoryDetail(id) {
   const title = document.getElementById('inventoryDetailTitle');
   const subtitle = document.getElementById('inventoryDetailSubtitle');
   const notesInput = document.getElementById('inventoryNotesInput');
+  const deleteButton = document.getElementById('inventoryDeleteBtn');
 
   inventoryState.selectedId = id;
   if (title) title.textContent = 'Loading asset details...';
   if (subtitle) subtitle.textContent = '';
   if (notesInput) notesInput.value = '';
+  deleteButton?.classList.toggle('hidden', !isInventorySuperAdmin());
 
   modal.classList.remove('hidden');
   modal.classList.add('show');
@@ -346,6 +352,29 @@ async function saveInventoryNotes() {
   await loadInventory();
 }
 
+async function deleteInventoryAsset() {
+  const id = inventoryState.selectedId;
+  if (!id || !isInventorySuperAdmin()) return;
+  const title = document.getElementById('inventoryDetailTitle')?.textContent || `asset #${id}`;
+  if (!confirm(`Permanently delete ${title}? This removes its inventory record and snapshot history. A collector can add it again if it reports later.`)) return;
+
+  try {
+    const reauthToken = await obtainReauthToken('inventory-delete');
+    const res = await fetch(`/api/inventory/${id}`, {
+      method: 'DELETE',
+      headers: { ...authHeaders(), 'X-Reauth-Token': reauthToken }
+    });
+    const data = await res.json().catch(() => ({}));
+    consumeCachedReauth('inventory-delete');
+    if (!res.ok) throw new Error(data.error || 'Unable to delete inventory asset');
+    closeInventoryDetail();
+    alert(data.message || 'Inventory asset permanently deleted');
+    await loadInventory();
+  } catch (error) {
+    alert(error.message || 'Unable to delete inventory asset');
+  }
+}
+
 function bindInventoryEvents() {
   document.getElementById('inventoryRefreshBtn')?.addEventListener('click', () => loadInventory());
 
@@ -376,6 +405,7 @@ function bindInventoryEvents() {
   });
 
   document.getElementById('inventorySaveNotesBtn')?.addEventListener('click', saveInventoryNotes);
+  document.getElementById('inventoryDeleteBtn')?.addEventListener('click', deleteInventoryAsset);
   document.getElementById('inventoryDetailModal')?.addEventListener('click', (event) => {
     if (event.target?.id === 'inventoryDetailModal') closeInventoryDetail();
   });
